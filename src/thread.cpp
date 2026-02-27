@@ -355,11 +355,13 @@ void ThreadPool::start_thinking(const OptionsMap&  options,
         for (const auto& m : legalmoves)
             rootMoves.emplace_back(m);
 
-    if (const auto expMove = select_experience_move(options, pos); expMove.has_value())
-    {
-        rootMoves.clear();
-        rootMoves.emplace_back(*expMove);
-    }
+    const bool hasSearchmovesConstraint = !limits.searchmoves.empty();
+    if (!hasSearchmovesConstraint)
+        if (const auto expMove = select_experience_move(options, pos); expMove.has_value())
+        {
+            rootMoves.clear();
+            rootMoves.emplace_back(*expMove);
+        }
 
     Tablebases::Config tbConfig = Tablebases::rank_root_moves(options, pos, rootMoves);
 
