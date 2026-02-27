@@ -140,6 +140,11 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("Experience Book Min Depth", Option(4, 1, 255));
 
+    options.add("Experience File", Option("Deepalienist.exp", [this](const Option&) {
+        LD.init(options);
+        return std::nullopt;
+    }));
+
     options.add("CTG/BIN Book 1 File", Option("", [this](const Option&) {
         bookManager.init(0, options);
         return std::nullopt;

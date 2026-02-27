@@ -144,7 +144,10 @@ std::string compiler_info() {
 
     std::string compiler = "\nCompiled by                : ";
 
-#if defined(__INTEL_LLVM_COMPILER)
+#if defined(__INTEL_COMPILER)
+    compiler += "Intel C++ ";
+    compiler += stringify(__INTEL_COMPILER);
+#elif defined(__INTEL_LLVM_COMPILER)
     compiler += "ICX ";
     compiler += stringify(__INTEL_LLVM_COMPILER);
 #elif defined(__clang__)
@@ -212,6 +215,12 @@ std::string compiler_info() {
     compiler += " AVX512";
 #endif
     compiler += (HasPext ? " BMI2" : "");
+#if defined(USE_PEXT)
+    compiler += " PEXT";
+#endif
+#if defined(USE_FMA)
+    compiler += " FMA";
+#endif
 #if defined(USE_AVX2)
     compiler += " AVX2";
 #endif

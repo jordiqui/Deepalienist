@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <sstream>
 #include <vector>
+#include <unordered_set>
 #include "../misc.h"
 #include "learn.h"
 #include <algorithm>
@@ -59,6 +60,14 @@ std::filesystem::path experience_directory() {
 
 std::filesystem::path experience_path(const std::string& filename) {
     return experience_directory() / filename;
+}
+
+std::string current_experience_file_name(const Stockfish::OptionsMap* options) {
+    if (!options)
+        return "Deepalienist.exp";
+
+    const std::string configured = static_cast<std::string>((*options)["Experience File"]);
+    return configured.empty() ? "Deepalienist.exp" : configured;
 }
 
 bool atomic_rename(const std::filesystem::path& source, const std::filesystem::path& dest) {
@@ -304,32 +313,17 @@ void LearningData::ensure_loaded() {
     isReadOnly              = readOnlyLearning;
     this->experienceEnabled = experienceEnabledOpt;
 
-    load(experience_path("experience.exp").string());
+    const string experienceFile = experience_file_name();
+
+    load(experience_path(experienceFile).string());
 
     vector<string> slaveFiles;
 
-    //Just in case, check and load for "experience.exp.tmp" which will be present if
-    //previous saving operation failed (engine crashed or terminated)
-    string slaveFile = "experience.exp.tmp";
+    // Just in case, check and load for "<Experience File>.tmp" which will be present if
+    // previous saving operation failed (engine crashed or terminated)
+    string slaveFile = experienceFile + ".tmp";
     if (load(experience_path(slaveFile).string()))
         slaveFiles.push_back(slaveFile);
-
-    slaveFile = "experience_new.exp";
-    if (load(experience_path(slaveFile).string()))
-        slaveFiles.push_back(slaveFile);
-
-    //Load slave experience files (if any)
-
-    int i = 0;
-    while (true)
-    {
-        slaveFile = "experience" + to_string(i) + ".exp";
-        if (const bool loadedSlave = load(experience_path(slaveFile).string()); !loadedSlave)
-            break;
-
-        slaveFiles.push_back(slaveFile);
-        ++i;
-    }
 
     //We need to write all consolidated experience to disk
     loaded = true;
@@ -348,9 +342,10 @@ void LearningData::ensure_loaded() {
 }
 
 void LearningData::quick_reset_exp() {
-    std::cout << "Loading experience file: experience.exp" << std::endl;
+    const std::string experienceFile = experience_file_name();
+    std::cout << "Loading experience file: " << experienceFile << std::endl;
 
-    std::ifstream file(experience_path("experience.exp"), std::ifstream::binary | std::ifstream::ate);
+    std::ifstream file(experience_path(experienceFile), std::ifstream::binary | std::ifstream::ate);
     if (!file)
     {
         std::cerr << "Failed to load experience file" << std::endl;
@@ -365,7 +360,7 @@ void LearningData::quick_reset_exp() {
 
     std::cout << "Total entries in the file: " << total_entries << std::endl;
 
-    if (const auto check = load(experience_path("experience.exp").string()); !check)
+    if (const auto check = load(experience_path(experienceFile).string()); !check)
     {
         std::cerr << "Failed to load experience file" << std::endl;
         return;
@@ -406,6 +401,20 @@ void LearningData::set_learning_mode(Stockfish::OptionsMap& options, const strin
 
 LearningMode LearningData::learning_mode() const { return learningMode; }
 
+
+size_t LearningData::total_positions() const {
+    std::unordered_set<Key> uniqueKeys;
+    uniqueKeys.reserve(HT.size());
+    for (const auto& [key, _] : HT)
+        uniqueKeys.insert(key);
+
+    return uniqueKeys.size();
+}
+
+std::string LearningData::experience_file_name() const {
+    return current_experience_file_name(optionsRef);
+}
+
 bool LearningData::persist(const Stockfish::OptionsMap&) {
     ensure_loaded();
 
@@ -423,7 +432,7 @@ bool LearningData::persist(const Stockfish::OptionsMap&) {
         If, for whatever odd reason, the engine fails after step (1), we will load "experience.exp.tmp" on restart.
     */
 
-    const auto experienceFilename     = experience_path("experience.exp");
+    const auto experienceFilename     = experience_path(experience_file_name());
     auto       tempExperienceFilename = experienceFilename;
     tempExperienceFilename += ".tmp";
     const bool experienceExists = std::filesystem::exists(experienceFilename);
@@ -601,6 +610,22 @@ void LearningData::show_exp(const Position& pos) {
 }
 
 namespace Experience {
+std::string stats_line() {
+    LD.ensure_loaded();
+
+    const auto fileName        = LD.experience_file_name();
+    const auto totalMoves      = LD.total_moves();
+    const auto totalPositions  = LD.total_positions();
+    const auto duplicateMoves  = totalMoves > totalPositions ? totalMoves - totalPositions : 0;
+    const double fragmentation = totalMoves == 0 ? 0.0 : (100.0 * duplicateMoves) / totalMoves;
+
+    std::ostringstream oss;
+    oss << fileName << " -> Total moves: " << totalMoves << ". Total positions: "
+        << totalPositions << ". Duplicate moves: " << duplicateMoves << ". Fragmentation: "
+        << std::fixed << std::setprecision(2) << fragmentation << "%";
+    return oss.str();
+}
+
 void flush_to_disk(const char* reason) {
     const auto* options = LD.options_ref();
     if (!options)

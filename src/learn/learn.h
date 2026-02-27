@@ -1,6 +1,8 @@
 #ifndef LEARN_H_INCLUDED
 #define LEARN_H_INCLUDED
 
+#include <cstddef>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include "../types.h"
@@ -69,6 +71,9 @@ class LearningData {
     bool persist(const Stockfish::OptionsMap& o);
     [[nodiscard]] bool experience_enabled() const { return experienceEnabled; }
     [[nodiscard]] const Stockfish::OptionsMap* options_ref() const { return optionsRef; }
+    [[nodiscard]] size_t total_moves() const { return HT.size(); }
+    [[nodiscard]] size_t total_positions() const;
+    [[nodiscard]] std::string experience_file_name() const;
 
     void add_new_learning(Stockfish::Key key, const LearningMove& lm);
 
@@ -83,6 +88,7 @@ extern LearningData LD;
 
 namespace Experience {
 void flush_to_disk(const char* reason);
+std::string stats_line();
 }
 
 }  // namespace Stockfish
