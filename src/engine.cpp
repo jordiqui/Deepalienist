@@ -121,6 +121,11 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("UCI_ShowWDL", Option(false));
 
+    options.add("Experience", Option(true, [this](const Option&) {
+        LD.init(options);
+        return std::nullopt;
+    }));
+
     options.add("Read only learning", Option(false, [this](const Option&) {
         LD.init(options);
         return std::nullopt;
