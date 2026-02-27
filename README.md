@@ -48,7 +48,7 @@ Each entry stores:
 
 At startup, Deepalienist loads `experience.exp` and then merges optional files matching:
 
-- `experience<qualityIndex>.exp` (for example `experience0.exp`, `experience1.exp`, ...)
+- `experience[qualityIndex].exp` (for example `experience0.exp`, `experience1.exp`, ...)
 
 Merged data is consolidated back into the main file.
 
