@@ -155,6 +155,8 @@ void UCIEngine::loop() {
             engine.trace_eval();
         else if (token == "showexp")
             engine.show_experience();
+        else if (token == "book" || token == "poly")
+            engine.show_book_moves();
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")

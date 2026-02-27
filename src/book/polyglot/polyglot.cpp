@@ -7,6 +7,7 @@
 #include "../../uci.h"
 #include "../file_mapping.h"
 #include "polyglot.h"
+#include "../util.h"
 
 namespace Stockfish {
 namespace Book {
@@ -445,63 +446,50 @@ bool PolyglotBook::open(const std::string& f) {
     return has_data();
 }
 
-Move PolyglotBook::probe(const Position& pos, size_t width, bool /*onlyGreen*/) const {
+std::vector<Book::CandidateMove> PolyglotBook::candidates(const Position& pos, bool /*onlyGreen*/) const {
+    std::vector<Book::CandidateMove> result;
+
     if (!has_data())
-        return Move::none();
+        return result;
 
     std::vector<PolyglotBookMove> bookMoves;
     get_moves(pos, bookMoves);
 
-    if (!bookMoves.size())
-        return Move::none();
+    if (bookMoves.empty())
+        return result;
 
-#if 1
-    //Remove any move with REALLY low weight compared to the total weight of all moves
-    //Such moves appear with probability 0% in SCID
-
-    //Calculate total weight for all moves
     uint64_t totalWeight = 0;
     for (const PolyglotBookMove& mv : bookMoves)
         totalWeight += mv.entry.count;
 
-    //Remove moves with weight percentage less than 0.5%
-    bookMoves.erase(std::remove_if(bookMoves.begin(), bookMoves.end(),
-                              [&totalWeight](const PolyglotBookMove& x) {
-                                  return uint64_t(x.entry.count) * 200 < totalWeight;
-                              }),
-                    bookMoves.end());
-#endif
+    for (const PolyglotBookMove& mv : bookMoves)
+        if (uint64_t(mv.entry.count) * 200 >= totalWeight)
+            result.push_back({mv.move, mv.entry.count});
 
-    //Sort moves accorging to their weights
-    std::stable_sort(bookMoves.begin(), bookMoves.end(),
-                     [](const PolyglotBookMove& mv1, const PolyglotBookMove& mv2) {
-                         return mv1.entry.count > mv2.entry.count;
-                     });
+    std::stable_sort(result.begin(), result.end(), [](const auto& a, const auto& b) {
+        return a.weight > b.weight;
+    });
 
-    //Only keep the top 'width' moves in the list
-    while (bookMoves.size() > width)
-        bookMoves.pop_back();
+    return result;
+}
+
+Move PolyglotBook::probe(const Position& pos, size_t width, bool onlyGreen) const {
+    auto moveList = candidates(pos, onlyGreen);
+    if (moveList.empty())
+        return Move::none();
+
+    while (moveList.size() > width)
+        moveList.pop_back();
 
     size_t selectedMoveIndex = 0;
-    if (bookMoves.size() > 1)
+    if (moveList.size() > 1)
     {
         auto randomEngine = make_engine(pos);
-        //Although not needed, let's shuffle candidate book moves just in case the random engine is more biased towards the middle
-        std::shuffle(bookMoves.begin(), bookMoves.end(), randomEngine);
-
-        //Return a random move
-        std::uniform_int_distribution<size_t> dist(0, bookMoves.size() - 1);
+        std::uniform_int_distribution<size_t> dist(0, moveList.size() - 1);
         selectedMoveIndex = dist(randomEngine);
     }
 
-    //Although not needed, let's shuffle candidate book moves just in case the random engine is more biased towards the middle
-    {
-        auto randomEngine = make_engine(pos);
-        std::shuffle(bookMoves.begin(), bookMoves.end(), randomEngine);
-    }
-
-    //Return a random move
-    return bookMoves[selectedMoveIndex].move;
+    return moveList[selectedMoveIndex].move;
 }
 
 void PolyglotBook::show_moves(const Position& pos) const {

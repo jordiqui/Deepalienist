@@ -1,11 +1,54 @@
 #include "../uci.h"
+#include "util.h"
 
+#include <algorithm>
 #include <iomanip>
+#include <random>
 #include "polyglot/polyglot.h"
 #include "ctg/ctg.h"
 #include "book_manager.h"
 
 namespace Stockfish {
+namespace {
+bool depth_ok(const OptionsMap& options, size_t i, int bookPly) {
+    const int depth = int(options[Util::format_string("Book %d Depth", i + 1)]);
+    return bookPly <= depth;
+}
+
+bool is_type(const Book::Book* book, const char* expected) {
+    return book != nullptr && book->type() == expected;
+}
+
+std::mt19937_64 make_engine(const Position& pos) {
+    std::seed_seq seeds = {uint32_t(pos.key()), uint32_t(pos.key() >> 32)};
+    return std::mt19937_64(seeds);
+}
+
+Move select_from_candidates(const Position& pos,
+                            std::vector<Book::Book::CandidateMove>& candidates,
+                            size_t width) {
+    if (candidates.empty())
+        return Move::none();
+
+    std::stable_sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) {
+        return a.weight > b.weight;
+    });
+
+    while (candidates.size() > width)
+        candidates.pop_back();
+
+    size_t selected = 0;
+    if (candidates.size() > 1)
+    {
+        auto randomEngine = make_engine(pos);
+        std::uniform_int_distribution<size_t> dist(0, candidates.size() - 1);
+        selected = dist(randomEngine);
+    }
+
+    return candidates[selected].move;
+}
+}
+
 BookManager::BookManager() {
     for (int i = 0; i < NumberOfBooks; ++i)
         books[i] = nullptr;
@@ -55,23 +98,38 @@ void BookManager::init(int index, const OptionsMap& options) {
 }
 
 Move BookManager::probe(const Position& pos, const OptionsMap& options, int bookPly) const {
-    Move bookMove = Move::none();
+    std::vector<Book::Book::CandidateMove> merged;
+    size_t                                 maxWidth = 1;
 
-    for (size_t i = 0; i < NumberOfBooks; ++i)
-    {
-        const int depth = int(options[Util::format_string("Book %d Depth", i + 1)]);
-        const bool depthOk = depth == 0 || bookPly < depth;
-        if (books[i] != nullptr && depthOk)
+    const auto gather_for_type = [&](const char* typeName, bool onlyCtgGreen) {
+        merged.clear();
+        maxWidth = 1;
+
+        for (size_t i = 0; i < NumberOfBooks; ++i)
         {
-            bookMove = books[i]->probe(
-              pos, size_t(int(options[Util::format_string("Book %d Width", i + 1)])),
-              bool(options[Util::format_string("(CTG) Book %d Only Green", i + 1)]));
-            if (bookMove != Move::none())
-                break;
-        }
-    }
+            if (!depth_ok(options, i, bookPly) || !is_type(books[i], typeName))
+                continue;
 
-    return bookMove;
+            const size_t width = size_t(int(options[Util::format_string("Book %d Width", i + 1)]));
+            const bool onlyGreen = onlyCtgGreen
+              && bool(options[Util::format_string("(CTG) Book %d Only Green", i + 1)]);
+            auto local = books[i]->candidates(pos, onlyGreen);
+            while (local.size() > width)
+                local.pop_back();
+            merged.insert(merged.end(), local.begin(), local.end());
+            maxWidth = std::max(maxWidth, width);
+        }
+
+        return select_from_candidates(pos, merged, maxWidth);
+    };
+
+    if (Move m = gather_for_type("bin", false); m != Move::none())
+        return m;
+
+    if (Move m = gather_for_type("ctg", true); m != Move::none())
+        return m;
+
+    return Move::none();
 }
 
 void BookManager::show_moves(const Position& pos, const OptionsMap& options) const {
@@ -80,7 +138,6 @@ void BookManager::show_moves(const Position& pos, const OptionsMap& options) con
     std::cout << "Polyglot key: 0x" << std::hex << std::setw(16) << std::setfill('0')
               << Book::Polyglot::Polyglot_key(pos) << std::dec << std::setfill(' ') << std::endl;
 
-    bool anyBook = false;
     bool anyMove = false;
 
     for (size_t i = 0; i < NumberOfBooks; ++i)
@@ -94,7 +151,6 @@ void BookManager::show_moves(const Position& pos, const OptionsMap& options) con
             continue;
         }
 
-        anyBook = true;
         if (books[i] == nullptr)
         {
             std::cout << "Book " << i + 1 << ": Failed to load (" << fileName << ")" << std::endl;
@@ -105,16 +161,11 @@ void BookManager::show_moves(const Position& pos, const OptionsMap& options) con
                   << std::endl;
         books[i]->show_moves(pos);
 
-        if (!anyMove)
-        {
-            auto move = books[i]->probe(
-              pos, size_t(int(options[Util::format_string("Book %d Width", i + 1)])),
-              bool(options[Util::format_string("(CTG) Book %d Only Green", i + 1)]));
-            anyMove = move != Move::none();
-        }
+        const bool onlyGreen = bool(options[Util::format_string("(CTG) Book %d Only Green", i + 1)]);
+        anyMove = anyMove || !books[i]->candidates(pos, onlyGreen).empty();
     }
 
-    if (!anyBook || !anyMove)
-        std::cout << "No book moves" << std::endl;
+    if (!anyMove)
+        std::cout << "no book moves" << std::endl;
 }
 }

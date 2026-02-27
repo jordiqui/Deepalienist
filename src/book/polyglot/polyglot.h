@@ -36,6 +36,7 @@ class PolyglotBook: public Book {
     virtual bool open(const std::string& f);
 
     virtual Move probe(const Position& pos, size_t width, bool onlyGreen) const;
+    virtual std::vector<CandidateMove> candidates(const Position& pos, bool onlyGreen) const;
 
     void show_moves(const Position& pos) const;
 };

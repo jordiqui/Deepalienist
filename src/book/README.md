@@ -6,26 +6,25 @@ This directory contains the integrated book management code (thanks to Khalid Om
 
 When a root move is requested, BrainLearnJR checks the configured sources in this order:
 
-1. **Book 1** (Polyglot BIN or ChessBase CTG)
-2. **Book 2** (Polyglot BIN or ChessBase CTG)
+1. **All configured BIN books** (Book 1 + Book 2 merged)
+2. **All configured CTG books** (Book 1 + Book 2 merged)
 3. **Live book** (only if the livebook subsystem is compiled in)
 
-If a move is found in Book 1, Book 2 is skipped. If neither Book 1 nor Book 2 produce a move,
-BrainLearnJR falls back to the live book (if available). If none provide a move, the normal
-search runs.
+If any BIN move exists, CTG and live book are skipped. If BIN has no move and CTG has a move,
+live book is skipped. If none provide a move, the normal search runs.
 
 ## UCI options
 
 Book 1:
 - `CTG/BIN Book 1 File` (string, default empty)
 - `Book 1 Width` (spin, default 1, min 1, max 50)
-- `Book 1 Depth` (spin, default 0, min 0, max 200)
+- `Book 1 Depth` (spin, default 255, min 0, max 255)
 - `(CTG) Book 1 Only Green` (check, default false)
 
 Book 2:
 - `CTG/BIN Book 2 File` (string, default empty)
 - `Book 2 Width` (spin, default 1, min 1, max 50)
-- `Book 2 Depth` (spin, default 0, min 0, max 200)
+- `Book 2 Depth` (spin, default 255, min 0, max 255)
 - `(CTG) Book 2 Only Green` (check, default false)
 
 ### File paths
@@ -37,17 +36,14 @@ Book 2:
 ### Width and randomness
 
 - `Width = 1` selects the best book move deterministically.
-- `Width > 1` selects randomly among the top-N moves.
-  The random seed is derived from the position key and a process seed, so it is stable per
-  position within a run.
+- `Width > 1` selects uniformly at random among the top-N moves.
 
 ### Depth
 
 Depth limits book usage **by ply** starting from the current root position:
 
 - The internal book ply counter resets to `0` on each new `position` command.
-- The counter increments after each **book** move is played (Book 1/Book 2).
-- `Book N Depth = 0` means **no depth limit**.
+- Depth is checked as `ply <= depth`; if `ply > depth`, that slot is ignored.
 
 ## `book` UCI command
 
@@ -58,7 +54,7 @@ The custom `book` command prints a short report for the current position, includ
 - Polyglot hash key
 - Configured book files and their available moves
 
-If no book moves are available, the command prints `No book moves` and exits cleanly.
+If no book moves are available, the command prints `no book moves` and exits cleanly.
 
 ## Known limitations (CTG)
 

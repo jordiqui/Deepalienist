@@ -58,6 +58,7 @@ class CtgBook: public Book {
     bool is_open() const;
 
     virtual Move probe(const Position& pos, size_t width, bool onlyGreen) const;
+    virtual std::vector<CandidateMove> candidates(const Position& pos, bool onlyGreen) const;
 
     virtual void show_moves(const Position& pos) const;
 };

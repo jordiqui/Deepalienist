@@ -37,6 +37,7 @@
 #include "search.h"
 #include "syzygy/tbprobe.h"  // for Stockfish::Depth
 #include "thread.h"
+#include "book/book_manager.h"
 #include "tt.h"
 #include "ucioption.h"
 
@@ -110,6 +111,8 @@ class Engine {
     std::string                            numa_config_information_as_string() const;
     std::string                            thread_allocation_information_as_string() const;
     std::string                            thread_binding_information_as_string() const;
+    void                                   show_book_moves() const;
+    std::optional<Move>                    pick_book_move() const;
 
    private:
     const std::string binaryDirectory;
@@ -121,6 +124,7 @@ class Engine {
 
     OptionsMap                                         options;
     ThreadPool                                         threads;
+    BookManager                                        bookManager;
     TranspositionTable                                 tt;
     LazyNumaReplicatedSystemWide<Eval::NNUE::Networks> networks;
 
