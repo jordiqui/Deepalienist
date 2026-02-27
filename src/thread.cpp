@@ -23,12 +23,14 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
 
 #include "bitboard.h"
 #include "history.h"
+#include "learn/learn.h"
 #include "memory.h"
 #include "movegen.h"
 #include "search.h"
@@ -142,6 +144,49 @@ uint64_t ThreadPool::nodes_searched() const { return accumulate(&Search::Worker:
 uint64_t ThreadPool::tb_hits() const { return accumulate(&Search::Worker::tbHits); }
 
 static size_t next_power_of_two(uint64_t count) { return count > 1 ? (2ULL << msb(count - 1)) : 1; }
+
+namespace {
+std::optional<Move> select_experience_move(const OptionsMap& options, const Position& pos) {
+    if (!static_cast<bool>(options["Experience Book"]))
+        return std::nullopt;
+
+    LD.ensure_loaded();
+
+    std::vector<LearningMove*> candidates = LD.probe(pos.key());
+    if (candidates.empty())
+        return std::nullopt;
+
+    const int minDepth = static_cast<int>(options["Experience Book Min Depth"]);
+    const int maxMoves = static_cast<int>(options["Experience Book Max Moves"]);
+
+    std::vector<Move> legal;
+    for (const auto& m : MoveList<LEGAL>(pos))
+        legal.push_back(m);
+
+    candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](const LearningMove* lm) {
+                         return lm->depth < minDepth
+                             || std::find(legal.begin(), legal.end(), lm->move) == legal.end();
+                     }),
+                     candidates.end());
+
+    if (candidates.empty())
+        return std::nullopt;
+
+    std::sort(candidates.begin(), candidates.end(), [](const LearningMove* a, const LearningMove* b) {
+        if (a->performance != b->performance)
+            return a->performance > b->performance;
+        if (a->score != b->score)
+            return a->score > b->score;
+        return a->depth > b->depth;
+    });
+
+    const size_t limit = std::min(candidates.size(), static_cast<size_t>(maxMoves));
+    if (limit == 0)
+        return std::nullopt;
+
+    return candidates[0]->move;
+}
+}  // namespace
 
 // Creates/destroys threads to match the requested number.
 // Created and launched threads will immediately go to sleep in idle_loop.
@@ -309,6 +354,12 @@ void ThreadPool::start_thinking(const OptionsMap&  options,
     if (rootMoves.empty())
         for (const auto& m : legalmoves)
             rootMoves.emplace_back(m);
+
+    if (const auto expMove = select_experience_move(options, pos); expMove.has_value())
+    {
+        rootMoves.clear();
+        rootMoves.emplace_back(*expMove);
+    }
 
     Tablebases::Config tbConfig = Tablebases::rank_root_moves(options, pos, rootMoves);
 

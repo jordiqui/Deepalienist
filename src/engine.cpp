@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "evaluate.h"
+#include "learn/learn.h"
 #include "misc.h"
 #include "nnue/network.h"
 #include "nnue/nnue_common.h"
@@ -120,6 +121,25 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("UCI_ShowWDL", Option(false));
 
+    options.add("Read only learning", Option(false, [this](const Option&) {
+        LD.init(options);
+        return std::nullopt;
+    }));
+
+    options.add("Self Q-learning", Option(false, [this](const Option&) {
+        LD.init(options);
+        return std::nullopt;
+    }));
+
+    options.add("Experience Book", Option(false, [this](const Option&) {
+        LD.init(options);
+        return std::nullopt;
+    }));
+
+    options.add("Experience Book Max Moves", Option(100, 1, 100));
+
+    options.add("Experience Book Min Depth", Option(4, 1, 255));
+
     options.add(  //
       "SyzygyPath", Option("", [](const Option& o) {
           Tablebases::init(o);
@@ -147,6 +167,8 @@ Engine::Engine(std::optional<std::string> path) :
     threads.clear();
     threads.ensure_network_replicated();
     resize_threads();
+
+    LD.init(options);
 }
 
 std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
@@ -349,6 +371,8 @@ std::string Engine::visualize() const {
     ss << pos;
     return ss.str();
 }
+
+void Engine::show_experience() const { LD.show_exp(pos); }
 
 int Engine::get_hashfull(int maxAge) const { return tt.hashfull(maxAge); }
 

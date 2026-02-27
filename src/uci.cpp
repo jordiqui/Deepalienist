@@ -31,6 +31,7 @@
 
 #include "benchmark.h"
 #include "engine.h"
+#include "learn/learn.h"
 #include "memory.h"
 #include "movegen.h"
 #include "position.h"
@@ -103,7 +104,11 @@ void UCIEngine::loop() {
         is >> std::skipws >> token;
 
         if (token == "quit" || token == "stop")
+        {
             engine.stop();
+            engine.wait_for_search_finished();
+            Experience::flush_to_disk(token.c_str());
+        }
 
         // The GUI sends 'ponderhit' to tell that the user has played the expected move.
         // So, 'ponderhit' is sent if pondering was done on the same move that the user
@@ -148,6 +153,8 @@ void UCIEngine::loop() {
             sync_cout << engine.visualize() << sync_endl;
         else if (token == "eval")
             engine.trace_eval();
+        else if (token == "showexp")
+            engine.show_experience();
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")
