@@ -119,7 +119,11 @@ void UCIEngine::loop() {
 
         else if (token == "uci")
         {
-            sync_cout << "id name " << engine_info(true) << "\n"
+            print_info_string(compiler_info());
+            print_info_string(Experience::stats_line());
+
+            sync_cout << "id name " << engine_version_info() << "\n"
+                      << "id author Jorge Ruiz and the Stockfish developers (see AUTHORS file)\n"
                       << engine.get_options() << sync_endl;
 
             sync_cout << "uciok" << sync_endl;

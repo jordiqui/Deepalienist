@@ -53,11 +53,7 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-ifeq ($(target_windows),yes)
-	EXE = stockfish.exe
-else
-	EXE = stockfish
-endif
+EXE ?= Deepalienist-3.50-270226-$(ARCHSUFFIX).exe
 
 ### Installation dir definitions
 PREFIX = /usr/local
