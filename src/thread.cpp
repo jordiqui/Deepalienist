@@ -147,6 +147,9 @@ static size_t next_power_of_two(uint64_t count) { return count > 1 ? (2ULL << ms
 
 namespace {
 std::optional<Move> select_experience_move(const OptionsMap& options, const Position& pos) {
+    if (!static_cast<bool>(options["Experience"]))
+        return std::nullopt;
+
     if (!static_cast<bool>(options["Experience Book"]))
         return std::nullopt;
 

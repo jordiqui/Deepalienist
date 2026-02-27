@@ -119,7 +119,10 @@ void UCIEngine::loop() {
 
         else if (token == "uci")
         {
+            const bool experienceEnabled = static_cast<bool>(engine.get_options()["Experience"]);
             print_info_string(compiler_info());
+            print_info_string(std::string("Experience enabled: ")
+                              + (experienceEnabled ? "true" : "false"));
             print_info_string(Experience::stats_line());
 
             sync_cout << "id name " << engine_version_info() << "\n"

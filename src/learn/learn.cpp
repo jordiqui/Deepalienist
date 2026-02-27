@@ -285,12 +285,13 @@ void LearningData::init(Stockfish::OptionsMap& o) {
     OptionsMap& options = o;
     clear();
     optionsRef = &options;
-    const bool readOnlyLearning     = static_cast<bool>(options["Read only learning"]);
-    const bool experienceEnabledOpt = static_cast<bool>(options["Experience Book"]);
+    const bool readOnlyLearning      = static_cast<bool>(options["Read only learning"]);
+    const bool experienceEnabledOpt  = static_cast<bool>(options["Experience Book"]);
+    const bool experienceGlobalEnabled = static_cast<bool>(options["Experience"]);
 
     isReadOnly              = readOnlyLearning;
     loaded                  = false;
-    this->experienceEnabled = experienceEnabledOpt;
+    this->experienceEnabled = experienceGlobalEnabled && experienceEnabledOpt;
     learningMode = static_cast<bool>(options["Self Q-learning"]) ? LearningMode::Self
                                                                    : LearningMode::Standard;
 
@@ -307,11 +308,19 @@ void LearningData::ensure_loaded() {
         return;
     }
 
-    const bool readOnlyLearning     = static_cast<bool>((*optionsRef)["Read only learning"]);
-    const bool experienceEnabledOpt = static_cast<bool>((*optionsRef)["Experience Book"]);
+    const bool readOnlyLearning      = static_cast<bool>((*optionsRef)["Read only learning"]);
+    const bool experienceEnabledOpt  = static_cast<bool>((*optionsRef)["Experience Book"]);
+    const bool experienceGlobalEnabled = static_cast<bool>((*optionsRef)["Experience"]);
 
     isReadOnly              = readOnlyLearning;
-    this->experienceEnabled = experienceEnabledOpt;
+    this->experienceEnabled = experienceGlobalEnabled && experienceEnabledOpt;
+
+    if (!experienceGlobalEnabled)
+    {
+        loaded = true;
+        needPersisting = false;
+        return;
+    }
 
     const string experienceFile = experience_file_name();
 
@@ -418,6 +427,9 @@ std::string LearningData::experience_file_name() const {
 bool LearningData::persist(const Stockfish::OptionsMap&) {
     ensure_loaded();
 
+    if (optionsRef && !static_cast<bool>((*optionsRef)["Experience"]))
+        return false;
+
     if (isReadOnly)
     {
         return false;
@@ -475,6 +487,9 @@ void LearningData::pause() { isPaused = true; }
 void LearningData::resume() { isPaused = false; }
 
 void LearningData::add_new_learning(Key key, const LearningMove& lm) {
+    if (optionsRef && !static_cast<bool>((*optionsRef)["Experience"]))
+        return;
+
     //Allocate buffer to read the entire file
     auto* newPlm = static_cast<PersistedLearningMove*>(malloc(sizeof(PersistedLearningMove)));
     if (!newPlm)
@@ -571,6 +586,13 @@ vector<LearningMove*> LearningData::probe(Stockfish::Key key) {
     return result;
 }
 void LearningData::show_exp(const Position& pos) {
+    const auto* options = LD.options_ref();
+    if (options && !static_cast<bool>((*options)["Experience"]))
+    {
+        sync_cout << "info string Experience disabled" << sync_endl;
+        return;
+    }
+
     sync_cout << pos << endl;
     cout << "Experience:";
     vector<LearningMove*> learningMoves = LD.probe(pos.key());
@@ -580,9 +602,8 @@ void LearningData::show_exp(const Position& pos) {
         return;
     }
 
-    const auto* options  = LD.options_ref();
-    const int   minDepth = options ? static_cast<int>((*options)["Experience Book Min Depth"]) : 1;
-    const int   maxMoves = options ? static_cast<int>((*options)["Experience Book Max Moves"]) : 100;
+    const int minDepth = options ? static_cast<int>((*options)["Experience Book Min Depth"]) : 1;
+    const int maxMoves = options ? static_cast<int>((*options)["Experience Book Max Moves"]) : 100;
 
     learningMoves.erase(remove_if(learningMoves.begin(), learningMoves.end(),
                                   [minDepth](const LearningMove* lm) { return lm->depth < minDepth; }),
@@ -611,9 +632,16 @@ void LearningData::show_exp(const Position& pos) {
 
 namespace Experience {
 std::string stats_line() {
+    const auto* options = LD.options_ref();
+    if (options && !static_cast<bool>((*options)["Experience"]))
+        return "Experience disabled";
+
+    const auto fileName = LD.experience_file_name();
+    if (fileName.empty())
+        return "No experience file loaded";
+
     LD.ensure_loaded();
 
-    const auto fileName        = LD.experience_file_name();
     const auto totalMoves      = LD.total_moves();
     const auto totalPositions  = LD.total_positions();
     const auto duplicateMoves  = totalMoves > totalPositions ? totalMoves - totalPositions : 0;
@@ -630,6 +658,12 @@ void flush_to_disk(const char* reason) {
     const auto* options = LD.options_ref();
     if (!options)
         return;
+
+    if (!static_cast<bool>((*options)["Experience"]))
+    {
+        sync_cout << "info string experience: disabled reason=" << reason << sync_endl;
+        return;
+    }
 
     if (static_cast<bool>((*options)["Read only learning"]))
         return;

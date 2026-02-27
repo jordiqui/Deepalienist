@@ -251,7 +251,8 @@ void Search::Worker::start_searching() {
 
     auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
 
-    if (!static_cast<bool>(options["Read only learning"]) && bestThread->rootMoves[0].pv[0] != Move::none())
+    if (static_cast<bool>(options["Experience"]) && !static_cast<bool>(options["Read only learning"])
+        && bestThread->rootMoves[0].pv[0] != Move::none())
     {
         LearningMove lm;
         lm.move        = bestThread->rootMoves[0].pv[0];
