@@ -2,9 +2,12 @@
 #define LEARN_H_INCLUDED
 
 #include <unordered_map>
+#include <vector>
 #include "../types.h"
 #include "../ucioption.h"
 #include "../position.h"
+
+namespace Stockfish {
 
 enum class LearningMode {
     Off      = 1,
@@ -13,14 +16,14 @@ enum class LearningMode {
 };
 
 struct LearningMove {
-    Brainlearn::Depth depth       = 0;
-    Brainlearn::Value score       = Brainlearn::VALUE_NONE;
-    Brainlearn::Move  move        = Brainlearn::Move::none();
+    Stockfish::Depth depth       = 0;
+    Stockfish::Value score       = Stockfish::VALUE_NONE;
+    Stockfish::Move  move        = Stockfish::Move::none();
     int               performance = 100;
 };
 
 struct PersistedLearningMove {
-    Brainlearn::Key key{};
+    Stockfish::Key key{};
     LearningMove    learningMove;
 };
 
@@ -36,9 +39,9 @@ class LearningData {
     LearningMode learningMode;
     bool         loaded;
     bool         experienceEnabled;
-    Brainlearn::OptionsMap* optionsRef;
+    Stockfish::OptionsMap* optionsRef;
 
-    std::unordered_multimap<Brainlearn::Key, LearningMove*> HT;
+    std::unordered_multimap<Stockfish::Key, LearningMove*> HT;
     std::vector<void*>                                      mainDataBuffers;
     std::vector<void*>                                      newMovesDataBuffers;
     bool                                                    load(const std::string& filename);
@@ -53,7 +56,7 @@ class LearningData {
     [[nodiscard]] bool is_paused() const { return isPaused; };
 
     void quick_reset_exp();
-    void set_learning_mode(Brainlearn::OptionsMap& options, const std::string& lm);
+    void set_learning_mode(Stockfish::OptionsMap& options, const std::string& lm);
     [[nodiscard]] LearningMode learning_mode() const;
     [[nodiscard]] bool         is_enabled() const { return learningMode != LearningMode::Off; }
 
@@ -61,19 +64,19 @@ class LearningData {
     [[nodiscard]] bool is_readonly() const { return isReadOnly; }
 
     void clear();
-    void init(Brainlearn::OptionsMap& o);
+    void init(Stockfish::OptionsMap& o);
     void ensure_loaded();
-    bool persist(const Brainlearn::OptionsMap& o);
+    bool persist(const Stockfish::OptionsMap& o);
     [[nodiscard]] bool experience_enabled() const { return experienceEnabled; }
-    [[nodiscard]] const Brainlearn::OptionsMap* options_ref() const { return optionsRef; }
+    [[nodiscard]] const Stockfish::OptionsMap* options_ref() const { return optionsRef; }
 
-    void add_new_learning(Brainlearn::Key key, const LearningMove& lm);
+    void add_new_learning(Stockfish::Key key, const LearningMove& lm);
 
-    int probeByMaxDepthAndScore(Brainlearn::Key key, const LearningMove*& learningMove);
-    const LearningMove*        probe_move(Brainlearn::Key key, Brainlearn::Move move);
-    std::vector<LearningMove*> probe(Brainlearn::Key key);
+    int probeByMaxDepthAndScore(Stockfish::Key key, const LearningMove*& learningMove);
+    const LearningMove*        probe_move(Stockfish::Key key, Stockfish::Move move);
+    std::vector<LearningMove*> probe(Stockfish::Key key);
     static void                sortLearningMoves(std::vector<LearningMove*>& learningMoves);
-    static void                show_exp(const Brainlearn::Position& pos);
+    static void                show_exp(const Stockfish::Position& pos);
 };
 
 extern LearningData LD;
@@ -81,5 +84,7 @@ extern LearningData LD;
 namespace Experience {
 void flush_to_disk(const char* reason);
 }
+
+}  // namespace Stockfish
 
 #endif  // #ifndef LEARN_H_INCLUDED

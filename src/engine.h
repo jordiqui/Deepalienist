@@ -104,6 +104,7 @@ class Engine {
     std::string                            fen() const;
     void                                   flip();
     std::string                            visualize() const;
+    void                                   show_experience() const;
     std::vector<std::pair<size_t, size_t>> get_bound_thread_count_by_numa_node() const;
     std::string                            get_numa_config_as_string() const;
     std::string                            numa_config_information_as_string() const;

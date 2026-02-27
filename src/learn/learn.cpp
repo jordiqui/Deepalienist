@@ -5,7 +5,6 @@
 #include <sstream>
 #include <vector>
 #include "../misc.h"
-#include "../wdl/win_probability.h"
 #include "learn.h"
 #include <algorithm>
 #include <cstdint>
@@ -15,11 +14,17 @@
 #endif
 
 using namespace std;
-using namespace Brainlearn;
+
+namespace Stockfish {
 
 LearningData LD;
 
 namespace {
+int win_probability_from_score(Value score) {
+    const int centered = 50 + score / 8;
+    return std::clamp(centered, 0, 100);
+}
+
 LearningMode identify_learning_mode(const string& lm) {
     if (lm == "Off")
         return LearningMode::Off;
@@ -49,9 +54,7 @@ std::filesystem::path experience_directory() {
         buffer.resize(buffer.size() * 2);
     }
 #endif
-    const auto fallback =
-      std::filesystem::path(Stockfish::Util::map_path("experience.exp")).parent_path();
-    return std::filesystem::absolute(fallback);
+    return std::filesystem::current_path();
 }
 
 std::filesystem::path experience_path(const std::string& filename) {
@@ -269,7 +272,7 @@ void LearningData::clear() {
     newMovesDataBuffers.clear();
 }
 
-void LearningData::init(Brainlearn::OptionsMap& o) {
+void LearningData::init(Stockfish::OptionsMap& o) {
     OptionsMap& options = o;
     clear();
     optionsRef = &options;
@@ -279,15 +282,8 @@ void LearningData::init(Brainlearn::OptionsMap& o) {
     isReadOnly              = readOnlyLearning;
     loaded                  = false;
     this->experienceEnabled = experienceEnabledOpt;
-    learningMode =
-      identify_learning_mode(static_cast<bool>(options["Self Q-learning"]) ? "Self" : "Standard");
-
-    if (!experienceEnabledOpt && !readOnlyLearning)
-    {
-        learningMode    = LearningMode::Off;
-        needPersisting  = false;
-        return;
-    }
+    learningMode = static_cast<bool>(options["Self Q-learning"]) ? LearningMode::Self
+                                                                   : LearningMode::Standard;
 
     ensure_loaded();
 }
@@ -307,12 +303,6 @@ void LearningData::ensure_loaded() {
 
     isReadOnly              = readOnlyLearning;
     this->experienceEnabled = experienceEnabledOpt;
-
-    if (!experienceEnabledOpt && !readOnlyLearning)
-    {
-        loaded = true;
-        return;
-    }
 
     load(experience_path("experience.exp").string());
 
@@ -390,7 +380,7 @@ void LearningData::quick_reset_exp() {
 
         const auto old_performance = learning_move->performance;
         const auto new_performance =
-          WDLModel::get_win_probability(learning_move->score, learning_move->depth);
+          win_probability_from_score(learning_move->score);
 
         std::cout << "Updating entry " << entry_count << "/" << total_entries << " Key " << key
                   << "Value " << learning_move->score << "Depth " << learning_move->depth
@@ -406,7 +396,7 @@ void LearningData::quick_reset_exp() {
 }
 
 
-void LearningData::set_learning_mode(Brainlearn::OptionsMap& options, const string& lm) {
+void LearningData::set_learning_mode(Stockfish::OptionsMap& options, const string& lm) {
     LearningMode newLearningMode = identify_learning_mode(lm);
     if (newLearningMode == learningMode)
         return;
@@ -416,17 +406,13 @@ void LearningData::set_learning_mode(Brainlearn::OptionsMap& options, const stri
 
 LearningMode LearningData::learning_mode() const { return learningMode; }
 
-bool LearningData::persist(const Brainlearn::OptionsMap& o) {
-    const OptionsMap& options = o;
+bool LearningData::persist(const Stockfish::OptionsMap&) {
     ensure_loaded();
 
     if (isReadOnly)
     {
         return false;
     }
-
-    if (!static_cast<bool>(options["Experience Book"]))
-        return false;
 
     /*
         To avoid any problems when saving to experience file, we will actually do the following:
@@ -556,23 +542,16 @@ const LearningMove* LearningData::probe_move(Key key, Move move) {
 
 
 void LearningData::sortLearningMoves(std::vector<LearningMove*>& learningMoves) {
-    std::sort(learningMoves.begin(), learningMoves.end(),
-              [](const LearningMove* a, const LearningMove* b) {
-                  if (a->depth != b->depth)
-                  {
-                      return a->depth > b->depth;
-                  }
-                  const int winProbA = a->performance;
-                  const int winProbB = b->performance;
-
-                  if (winProbA != winProbB)
-                  {
-                      return winProbA > winProbB;
-                  }
-                  return a->score > b->score;
-              });
+    std::sort(learningMoves.begin(), learningMoves.end(), [](const LearningMove* a, const LearningMove* b) {
+        if (a->performance != b->performance)
+            return a->performance > b->performance;
+        if (a->score != b->score)
+            return a->score > b->score;
+        return a->depth > b->depth;
+    });
 }
-vector<LearningMove*> LearningData::probe(Brainlearn::Key key) {
+
+vector<LearningMove*> LearningData::probe(Stockfish::Key key) {
     vector<LearningMove*> result;
     auto                  range = HT.equal_range(key);
     for (auto it = range.first; it != range.second; ++it)
@@ -584,42 +563,57 @@ vector<LearningMove*> LearningData::probe(Brainlearn::Key key) {
 }
 void LearningData::show_exp(const Position& pos) {
     sync_cout << pos << endl;
-    cout << "Experience: ";
+    cout << "Experience:";
     vector<LearningMove*> learningMoves = LD.probe(pos.key());
     if (learningMoves.empty())
     {
-        cout << "No experience data found for this position" << sync_endl;
+        cout << " No experience data found for this position" << sync_endl;
+        return;
+    }
+
+    const auto* options  = LD.options_ref();
+    const int   minDepth = options ? static_cast<int>((*options)["Experience Book Min Depth"]) : 1;
+    const int   maxMoves = options ? static_cast<int>((*options)["Experience Book Max Moves"]) : 100;
+
+    learningMoves.erase(remove_if(learningMoves.begin(), learningMoves.end(),
+                                  [minDepth](const LearningMove* lm) { return lm->depth < minDepth; }),
+                        learningMoves.end());
+
+    if (learningMoves.empty())
+    {
+        cout << " No entries satisfy current Experience Book Min Depth" << sync_endl;
         return;
     }
 
     sortLearningMoves(learningMoves);
+    const size_t limit = min(static_cast<size_t>(maxMoves), learningMoves.size());
 
     cout << endl;
-    for (const auto& move : learningMoves)
+    for (size_t i = 0; i < limit; ++i)
     {
-        const int winProb = move->performance;
-        cout << "move: " << UCIEngine::move(move->move, pos.is_chess960())
-             << " depth: " << move->depth << " value: " << move->score
-             << " win probability: " << winProb << endl;
+        const auto& move = learningMoves[i];
+        const int   winProb = move->performance;
+        cout << "move: " << UCIEngine::move(move->move, pos.is_chess960()) << " winprob: " << winProb
+             << " score: " << move->score << " depth: " << move->depth
+             << " performance: " << move->performance << endl;
     }
     cout << sync_endl;
 }
 
 namespace Experience {
 void flush_to_disk(const char* reason) {
-    const auto* options = ::LD.options_ref();
+    const auto* options = LD.options_ref();
     if (!options)
         return;
 
     if (static_cast<bool>((*options)["Read only learning"]))
         return;
 
-    if (!static_cast<bool>((*options)["Experience Book"]))
-        return;
-
-    const bool wrote = ::LD.persist(*options);
+    const bool wrote = LD.persist(*options);
     const auto message =
       std::string("experience: flushed reason=") + reason + " wrote=" + (wrote ? "1" : "0");
     sync_cout << "info string " << message << sync_endl;
 }
 }
+
+}  // namespace Stockfish

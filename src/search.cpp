@@ -36,6 +36,7 @@
 #include "bitboard.h"
 #include "evaluate.h"
 #include "history.h"
+#include "learn/learn.h"
 #include "misc.h"
 #include "movegen.h"
 #include "movepick.h"
@@ -249,6 +250,17 @@ void Search::Worker::start_searching() {
         ponder = UCIEngine::move(bestThread->rootMoves[0].pv[1], rootPos.is_chess960());
 
     auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
+
+    if (!static_cast<bool>(options["Read only learning"]) && bestThread->rootMoves[0].pv[0] != Move::none())
+    {
+        LearningMove lm;
+        lm.move        = bestThread->rootMoves[0].pv[0];
+        lm.depth       = std::max<Depth>(1, bestThread->completedDepth);
+        lm.score       = bestThread->rootMoves[0].score;
+        lm.performance = std::clamp(50 + static_cast<int>(lm.score) / 8, 0, 100);
+        LD.add_new_learning(rootPos.key(), lm);
+    }
+
     main_manager()->updates.onBestmove(bestmove, ponder);
 }
 
