@@ -872,6 +872,16 @@ ifneq ($(ARCH), )
 	CXXFLAGS += -DARCH=$(ARCH)
 endif
 
+ifeq ($(ARCH),x86-64)
+	ARCHSUFFIX = x86-64
+else
+	ARCHSUFFIX = $(shell printf '%s' '$(ARCH)' | tr '[:upper:]' '[:lower:]' | sed -E 's/^x86-64-//; s/[^a-z0-9-]//g; s/-//g')
+endif
+
+ifneq ($(ARCHSUFFIX), )
+	CXXFLAGS += -DENGINE_ARCH_SUFFIX=\"$(ARCHSUFFIX)\"
+endif
+
 ### 3.9 Link Time Optimization
 ### This is a mix of compile and link time options because the lto link phase
 ### needs access to the optimization flags.
