@@ -145,7 +145,7 @@ endif
 # the user can override with `make ARCH=x86-64-avx512icl SUPPORTED_ARCH=true`
 ifeq ($(ARCH), $(filter $(ARCH), \
                  x86-64-avx512icl x86-64-vnni512 x86-64-avx512 x86-64-avxvnni \
-                 x86-64-bmi2 x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
+                 x86-64-FMA3 x86-64-bmi2 x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
                  x86-64 x86-32-sse41-popcnt x86-32-sse2 x86-32 ppc-64 ppc-64-altivec ppc-64-vsx ppc-32 e2k \
                  armv7 armv7-neon armv8 armv8-dotprod apple-silicon general-64 general-32 riscv64 \
                  loongarch64 loongarch64-lsx loongarch64-lasx))
@@ -167,6 +167,7 @@ sse2 = no
 ssse3 = no
 sse41 = no
 avx2 = no
+fma = no
 avxvnni = no
 avx512 = no
 vnni512 = no
@@ -250,6 +251,17 @@ ifeq ($(findstring -avx2,$(ARCH)),-avx2)
 	ssse3 = yes
 	sse41 = yes
 	avx2 = yes
+endif
+
+ifeq ($(filter x86-64-FMA3 x86-64-fma3,$(ARCH)),$(ARCH))
+	popcnt = yes
+	sse = yes
+	sse2 = yes
+	ssse3 = yes
+	sse41 = yes
+	avx2 = yes
+	pext = yes
+	fma = yes
 endif
 
 ifeq ($(findstring -avxvnni,$(ARCH)),-avxvnni)
@@ -441,9 +453,12 @@ ifeq ($(MAKELEVEL),0)
        export ENV_LDFLAGS := $(LDFLAGS)
 endif
 
+override LINKER_FLAGS_FROM_CXXFLAGS := $(filter -fuse-ld=%,$(EXTRACXXFLAGS))
+override EXTRACXXFLAGS := $(filter-out -fuse-ld=%,$(EXTRACXXFLAGS))
+
 CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
-LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
+LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS) $(LINKER_FLAGS_FROM_CXXFLAGS)
 
 ifeq ($(COMP),)
 	COMP=gcc
@@ -730,6 +745,12 @@ ifeq ($(avx2),yes)
 	endif
 endif
 
+ifeq ($(fma),yes)
+	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
+		CXXFLAGS += -mfma
+	endif
+endif
+
 ifeq ($(avxvnni),yes)
 	CXXFLAGS += -DUSE_VNNI -DUSE_AVXVNNI
 	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
@@ -942,6 +963,7 @@ help:
 	echo "x86-64-avxvnni          > x86 64-bit with vnni 256bit support" && \
 	echo "x86-64-bmi2             > x86 64-bit with bmi2 support" && \
 	echo "x86-64-avx2             > x86 64-bit with avx2 support" && \
+	echo "x86-64-FMA3             > x86 64-bit tuned for Zen-era CPUs (avx2, bmi2, fma3)" && \
 	echo "x86-64-sse41-popcnt     > x86 64-bit with sse41 and popcnt support" && \
 	echo "x86-64-modern           > deprecated, currently x86-64-sse41-popcnt" && \
 	echo "x86-64-ssse3            > x86 64-bit with ssse3 support" && \

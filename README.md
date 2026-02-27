@@ -80,12 +80,26 @@ Use this identifier in release notes and packaging metadata. Engine runtime ID s
 
 ## Downloads / Usage
 
-- Build from source in `src/` (GNU Make):
+- Build from source in `src/` (GNU Make).
+
+## Build variants (GNU Make)
 
 ```bash
 cd src
+
+# Generic PGO build
 make -j profile-build
+
+# SSE4.1 + POPCNT PGO build (requested baseline)
+make -j ARCH=x86-64-sse41-popcnt profile-build COMP=clang EXTRACXXFLAGS="-fuse-ld=lld"
+
+# Zen-class FMA3 build (new ARCH target)
+make -j ARCH=x86-64-FMA3 profile-build COMP=clang EXTRACXXFLAGS="-fuse-ld=lld"
 ```
+
+Notes:
+- `EXTRACXXFLAGS` accepts regular compile flags and may include `-fuse-ld=...`; the Makefile forwards linker-selection flags to the link step automatically.
+- Linker-only flags can still be passed explicitly via `EXTRALDFLAGS`.
 
 - Run via any UCI-compatible GUI or UCI command-line workflow.
 
