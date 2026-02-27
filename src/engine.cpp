@@ -140,6 +140,22 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("Experience Book Min Depth", Option(4, 1, 255));
 
+    options.add("CTG/BIN Book 1 File", Option("", [this](const Option&) {
+        bookManager.init(0, options);
+        return std::nullopt;
+    }));
+    options.add("Book 1 Width", Option(1, 1, 50));
+    options.add("Book 1 Depth", Option(255, 0, 255));
+    options.add("(CTG) Book 1 Only Green", Option(false));
+
+    options.add("CTG/BIN Book 2 File", Option("", [this](const Option&) {
+        bookManager.init(1, options);
+        return std::nullopt;
+    }));
+    options.add("Book 2 Width", Option(1, 1, 50));
+    options.add("Book 2 Depth", Option(255, 0, 255));
+    options.add("(CTG) Book 2 Only Green", Option(false));
+
     options.add(  //
       "SyzygyPath", Option("", [](const Option& o) {
           Tablebases::init(o);
@@ -168,6 +184,7 @@ Engine::Engine(std::optional<std::string> path) :
     threads.ensure_network_replicated();
     resize_threads();
 
+    bookManager.init(options);
     LD.init(options);
 }
 
@@ -180,6 +197,10 @@ std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
     verify_networks();
+
+    if (limits.searchmoves.empty())
+        if (const auto bookMove = pick_book_move(); bookMove.has_value())
+            limits.searchmoves = {UCIEngine::move(*bookMove, pos.is_chess960())};
 
     threads.start_thinking(options, pos, states, limits);
 }
@@ -216,6 +237,26 @@ void Engine::set_on_verify_networks(std::function<void(std::string_view)>&& f) {
 }
 
 void Engine::wait_for_search_finished() { threads.main_thread()->wait_for_search_finished(); }
+
+
+std::optional<Move> Engine::pick_book_move() const {
+    if (!options.count("CTG/BIN Book 1 File"))
+        return std::nullopt;
+
+    const int plyFromRoot = states ? int(states->size()) - 1 : 0;
+    const Move move = bookManager.probe(pos, options, plyFromRoot);
+    return move == Move::none() ? std::nullopt : std::optional<Move>(move);
+}
+
+void Engine::show_book_moves() const {
+    if (!options.count("CTG/BIN Book 1 File"))
+    {
+        sync_cout << "no book moves" << sync_endl;
+        return;
+    }
+
+    bookManager.show_moves(pos, options);
+}
 
 void Engine::set_position(const std::string& fen, const std::vector<std::string>& moves) {
     // Drop the old state and create a new one

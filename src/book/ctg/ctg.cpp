@@ -7,6 +7,7 @@
 #include "../../position.h"
 #include "../../uci.h"
 #include "ctg.h"
+#include "../util.h"
 
 namespace Stockfish {
 namespace {
@@ -1035,52 +1036,51 @@ void CtgBook::close() {
 
 bool CtgBook::is_open() const { return isOpen; }
 
-Move CtgBook::probe(const Position& pos, size_t width, bool onlyGreen) const {
+std::vector<Book::CandidateMove> CtgBook::candidates(const Position& pos, bool onlyGreen) const {
+    std::vector<Book::CandidateMove> result;
+
     if (!is_open())
-        return Move::none();
+        return result;
 
     CtgPositionData positionData;
     if (!decode(pos, positionData))
-        return Move::none();
+        return result;
 
     CtgMoveList ctgMoveList;
     get_moves(pos, positionData, ctgMoveList);
 
-    if (ctgMoveList.size() == 0)
+    ctgMoveList.erase(std::remove_if(ctgMoveList.begin(), ctgMoveList.end(), [&](const CtgMove& x) {
+                         return x.red() || (onlyGreen && !x.green()) || x.weight() < 0;
+                     }),
+                     ctgMoveList.end());
+
+    for (const CtgMove& mv : ctgMoveList)
+        result.push_back({mv.sf_move(), uint32_t(mv.weight())});
+
+    std::stable_sort(result.begin(), result.end(), [](const auto& a, const auto& b) {
+        return a.weight > b.weight;
+    });
+
+    return result;
+}
+
+Move CtgBook::probe(const Position& pos, size_t width, bool onlyGreen) const {
+    auto moveList = candidates(pos, onlyGreen);
+    if (moveList.empty())
         return Move::none();
 
-    //Remove red moves and any moves with negative weight
-    ctgMoveList.erase(std::remove_if(ctgMoveList.begin(), ctgMoveList.end(),
-                                [&](const CtgMove& x) {
-                                    return x.red() || (onlyGreen && !x.green()) || x.weight() < 0;
-                                }),
-                      ctgMoveList.end());
-
-    //Check move list again after removing unwanted moves
-    if (ctgMoveList.size() == 0)
-        return Move::none();
-
-    //Sort moves accorging to their weights
-    std::stable_sort(ctgMoveList.begin(), ctgMoveList.end(),
-                     [](const CtgMove& mv1, const CtgMove& mv2) { return mv1.weight() > mv2.weight(); });
-
-    //Only keep the top 'width' moves in the list
-    while (ctgMoveList.size() > width)
-        ctgMoveList.pop_back();
+    while (moveList.size() > width)
+        moveList.pop_back();
 
     size_t selectedMoveIndex = 0;
-    if (ctgMoveList.size() > 1)
+    if (moveList.size() > 1)
     {
         auto randomEngine = make_engine(pos);
-        //Although not needed, let's shuffle candidate book moves just in case the random engine is more biased towards the middle
-        std::shuffle(ctgMoveList.begin(), ctgMoveList.end(), randomEngine);
-
-        //Return a random move
-        std::uniform_int_distribution<size_t> dist(0, ctgMoveList.size() - 1);
+        std::uniform_int_distribution<size_t> dist(0, moveList.size() - 1);
         selectedMoveIndex = dist(randomEngine);
     }
 
-    return ctgMoveList[selectedMoveIndex].sf_move();
+    return moveList[selectedMoveIndex].move;
 }
 
 void CtgBook::show_moves(const Position& pos) const {

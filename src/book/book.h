@@ -59,6 +59,11 @@ class Book {
     static Book* create_book(const std::string& filename);
 
    public:
+    struct CandidateMove {
+        Move     move;
+        uint32_t weight;
+    };
+
     Book() {}
     virtual ~Book() {}
 
@@ -71,6 +76,7 @@ class Book {
     virtual void close()                           = 0;
 
     virtual Move probe(const Position& pos, size_t width, bool onlyGreen) const = 0;
+    virtual std::vector<CandidateMove> candidates(const Position& pos, bool onlyGreen) const = 0;
     virtual void show_moves(const Position& pos) const                          = 0;
 };
 }
