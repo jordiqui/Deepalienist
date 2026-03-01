@@ -613,8 +613,10 @@ ifdef COMPCXX
 endif
 
 LLVM_PROFDATA ?= llvm-profdata
+PGOFILE ?=
 CLANG_RESOURCE_DIR := $(shell $(CXX) -print-resource-dir 2>/dev/null)
 CLANG_PROFILE_RT_WIN := $(CLANG_RESOURCE_DIR)/lib/windows/libclang_rt.profile-x86_64.a
+CLANG_PGO_USE_FILE := $(if $(PGOFILE),$(PGOFILE),default.profdata)
 
 ifeq ($(comp),icx)
 	profile_make = icx-profile-make
@@ -1004,7 +1006,7 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
-.PHONY: help analyze build profile-build strip install clean net \
+.PHONY: help analyze build profile-build profile-use strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
@@ -1046,6 +1048,11 @@ profile-build: net config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 4/4. Deleting profile data ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) profileclean
+
+profile-use: net config-sanity objclean
+	@echo ""
+	@echo "Building optimized executable with existing profile data ..."
+	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_use)
 
 strip:
 	$(STRIP) $(EXE)
@@ -1170,8 +1177,8 @@ clang-profile-make:
 		exit 1; \
 	fi
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-instr-generate' \
-	EXTRALDFLAGS='-fprofile-instr-generate $(if $(filter yes,$(target_windows)),$(CLANG_PROFILE_RT_WIN))' \
+	EXTRACXXFLAGS='$(EXTRACXXFLAGS) -fprofile-instr-generate' \
+	EXTRALDFLAGS='$(EXTRALDFLAGS) -fprofile-instr-generate $(if $(filter yes,$(target_windows)),$(CLANG_PROFILE_RT_WIN))' \
 	all
 
 clang-profile-use:
@@ -1180,12 +1187,13 @@ clang-profile-use:
 		echo "ERROR: missing Clang profile runtime: $(CLANG_PROFILE_RT_WIN)"; \
 		exit 1; \
 	fi
-	$(XCRUN) $(LLVM_PROFDATA) merge -output=default.profdata default.profraw
+	@if [ -z "$(PGOFILE)" ]; then \
+		$(XCRUN) $(LLVM_PROFDATA) merge -output=$(CLANG_PGO_USE_FILE) default.profraw; \
+	fi
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-instr-use=default.profdata' \
-	EXTRALDFLAGS='-fprofile-instr-use=default.profdata $(if $(filter yes,$(target_windows)),$(CLANG_PROFILE_RT_WIN))' \
+	EXTRACXXFLAGS='$(EXTRACXXFLAGS) -fprofile-instr-use=$(CLANG_PGO_USE_FILE)' \
+	EXTRALDFLAGS='$(EXTRALDFLAGS) -fprofile-instr-use=$(CLANG_PGO_USE_FILE) $(if $(filter yes,$(target_windows)),$(CLANG_PROFILE_RT_WIN))' \
 	all
-
 gcc-profile-make:
 	@mkdir -p profdir
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
