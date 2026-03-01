@@ -43,7 +43,8 @@ ifeq ($(target_windows),yes)
 else
 	EXESUF =
 endif
-EXE = revolution$(EXESUF)
+BUILD_ARCH_TAG = unknown
+EXE = Deepalienist-3.60-010326-$(BUILD_ARCH_TAG)$(EXESUF)
 
 NNUE_BIG = nn-5227780996d3.nnue
 NNUE_SMALL = nn-37f18f62d772.nnue
@@ -131,6 +132,15 @@ endif
 
 ifeq ($(ARCH), native)
    override ARCH := $(shell $(SHELL) ../scripts/get_native_properties.sh | cut -d " " -f 1)
+endif
+
+# Build-time tag used for UCI id name and binary naming
+ifeq ($(ARCH),x86-64-sse41-popcnt)
+	BUILD_ARCH_TAG = sse41popcnt
+else ifeq ($(ARCH),x86-64-avx2)
+	BUILD_ARCH_TAG = avx2
+else ifeq ($(ARCH),x86-64-bmi2)
+	BUILD_ARCH_TAG = fma3
 endif
 
 # explicitly check for the list of supported architectures (as listed with make help),
@@ -832,6 +842,10 @@ endif
 ### 3.8.3 Try to include architecture
 ifneq ($(ARCH), )
 	CXXFLAGS += -DARCH=$(ARCH)
+endif
+
+ifneq ($(BUILD_ARCH_TAG), )
+	CXXFLAGS += -DBUILD_ARCH_TAG=\"$(BUILD_ARCH_TAG)\"
 endif
 
 ### 3.9 Link Time Optimization
