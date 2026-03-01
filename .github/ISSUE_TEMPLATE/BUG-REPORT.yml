@@ -56,10 +56,10 @@ body:
 
 - type: input
   attributes:
-    label: Deepalienist version
+    label: Stockfish version
     description: |
       This can be found by running the engine.
       You can also use the commit ID.
-    placeholder: Deepalienist-3.50-27022026 / <commit-id>
+    placeholder: Stockfish 15 / e6e324e
   validations:
     required: true

@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,7 +20,6 @@
 #define SHM_H_INCLUDED
 
 #include <algorithm>
-#include <cinttypes>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -36,7 +35,7 @@
 #include <utility>
 #include <variant>
 
-#if defined(__linux__) && !defined(__ANDROID__)
+#if !defined(_WIN32) && !defined(__ANDROID__)
     #include "shm_linux.h"
 #endif
 
@@ -60,7 +59,7 @@
         #define NOMINMAX
     #endif
     #include <windows.h>
-#elif defined(__linux__)
+#else
     #include <cstring>
     #include <fcntl.h>
     #include <pthread.h>
@@ -407,7 +406,7 @@ class SharedMemoryBackend {
     std::string last_error_message;
 };
 
-#elif defined(__linux__) && !defined(__ANDROID__)
+#elif !defined(__ANDROID__)
 
 template<typename T>
 class SharedMemoryBackend {
@@ -456,8 +455,7 @@ class SharedMemoryBackend {
    public:
     SharedMemoryBackend() = default;
 
-    SharedMemoryBackend([[maybe_unused]] const std::string& shm_name,
-                        [[maybe_unused]] const T&           value) {}
+    SharedMemoryBackend(const std::string& shm_name, const T& value) {}
 
     void* get() const { return nullptr; }
 
@@ -513,9 +511,12 @@ template<typename T>
 struct SystemWideSharedConstant {
    private:
     static std::string createHashString(const std::string& input) {
-        char buf[1024];
-        std::snprintf(buf, sizeof(buf), "%016" PRIx64, hash_string(input));
-        return buf;
+        size_t hash = std::hash<std::string>{}(input);
+
+        std::stringstream ss;
+        ss << std::hex << std::setfill('0') << hash;
+
+        return ss.str();
     }
 
    public:
@@ -532,14 +533,13 @@ struct SystemWideSharedConstant {
     // that are not present in the content, for example NUMA node allocation.
     SystemWideSharedConstant(const T& value, std::size_t discriminator = 0) {
         std::size_t content_hash    = std::hash<T>{}(value);
-        std::size_t executable_hash = hash_string(getExecutablePathHash());
+        std::size_t executable_hash = std::hash<std::string>{}(getExecutablePathHash());
 
-        char buf[1024];
-        std::snprintf(buf, sizeof(buf), "Local\\sf_%zu$%zu$%zu", content_hash, executable_hash,
-                      discriminator);
-        std::string shm_name = buf;
+        std::string shm_name = std::string("Local\\sf_") + std::to_string(content_hash) + "$"
+                             + std::to_string(executable_hash) + "$"
+                             + std::to_string(discriminator);
 
-#if defined(__linux__) && !defined(__ANDROID__)
+#if !defined(_WIN32)
         // POSIX shared memory names must start with a slash
         shm_name = "/sf_" + createHashString(shm_name);
 
