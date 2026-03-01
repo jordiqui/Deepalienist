@@ -449,6 +449,7 @@ ifeq ($(MAKELEVEL),0)
        export ENV_LDFLAGS := $(LDFLAGS)
 endif
 
+override EXTRACXXFLAGS += $(EXTRA_CXXFLAGS)
 override LINKER_FLAGS_FROM_CXXFLAGS := $(filter -fuse-ld=%,$(EXTRACXXFLAGS))
 override EXTRACXXFLAGS := $(filter-out -fuse-ld=%,$(EXTRACXXFLAGS))
 
