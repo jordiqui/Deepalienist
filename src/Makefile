@@ -134,6 +134,26 @@ ifeq ($(ARCH), native)
    override ARCH := $(shell $(SHELL) ../scripts/get_native_properties.sh | cut -d " " -f 1)
 endif
 
+# Compatibility aliases with common Stockfish ARCH names
+ifeq ($(ARCH),x86-64-v2)
+   override ARCH := x86-64-sse41-popcnt
+endif
+ifeq ($(ARCH),x86-64-v3)
+   override ARCH := x86-64-bmi2
+endif
+ifeq ($(ARCH),x86-64-v4)
+   override ARCH := x86-64-avx512
+endif
+ifeq ($(ARCH),x86-64-vnni256)
+   override ARCH := x86-64-avxvnni
+endif
+ifeq ($(ARCH),x86-64-fma3)
+   override ARCH := x86-64-bmi2
+endif
+ifeq ($(ARCH),x86-64-FMA3)
+   override ARCH := x86-64-bmi2
+endif
+
 # Build-time tag used for UCI id name and binary naming
 ifeq ($(ARCH),x86-64-sse41-popcnt)
 	BUILD_ARCH_TAG = sse41popcnt
@@ -923,11 +943,17 @@ help:
 	echo "native                  > select the best architecture for the host processor (default)" && \
 	echo "x86-64-avx512icl        > x86 64-bit with minimum avx512 support of Intel Ice Lake or AMD Zen 4" && \
 	echo "x86-64-vnni512          > x86 64-bit with vnni 512bit support" && \
+	echo "x86-64-vnni256          > alias of x86-64-avxvnni (Stockfish naming)" && \
 	echo "x86-64-avx512           > x86 64-bit with avx512 support" && \
+	echo "x86-64-v4               > alias of x86-64-avx512" && \
 	echo "x86-64-avxvnni          > x86 64-bit with vnni 256bit support" && \
 	echo "x86-64-bmi2             > x86 64-bit with bmi2 support" && \
+	echo "x86-64-fma3             > alias of x86-64-bmi2 (AVX2/BMI2/FMA3)" && \
+	echo "x86-64-FMA3             > alias of x86-64-bmi2 (AVX2/BMI2/FMA3)" && \
 	echo "x86-64-avx2             > x86 64-bit with avx2 support" && \
+	echo "x86-64-v3               > alias of x86-64-bmi2 (AVX2/BMI2/FMA3)" && \
 	echo "x86-64-sse41-popcnt     > x86 64-bit with sse41 and popcnt support" && \
+	echo "x86-64-v2               > alias of x86-64-sse41-popcnt" && \
 	echo "x86-64-modern           > deprecated, currently x86-64-sse41-popcnt" && \
 	echo "x86-64-ssse3            > x86 64-bit with ssse3 support" && \
 	echo "x86-64-sse3-popcnt      > x86 64-bit with sse3 compile and popcnt support" && \
