@@ -39,11 +39,12 @@ namespace Stockfish {
 
 namespace {
 
-#ifndef ENGINE_ARCH_SUFFIX
-    #define ENGINE_ARCH_SUFFIX "generic"
+// Version number or dev.
+#ifdef ENGINE_VERSION
+constexpr std::string_view version = ENGINE_VERSION;
+#else
+constexpr std::string_view version = "4.90-210226";
 #endif
-
-constexpr std::string_view EngineNameVersion = "Deepalienist-3.50-270226";
 
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -116,9 +117,51 @@ class Logger {
 }  // namespace
 
 
-// Returns the full engine name used in UCI/console headers.
+// Returns the full name of the current Revolution version.
+//
+// For local dev compiles we try to append the commit SHA and
+// commit date from git. If that fails only the local compilation
+// date is set and "nogit" is specified:
+//      Revolution-dev-YYYYMMDD-SHA
+//      or
+//      Revolution-dev-YYYYMMDD-nogit
+//
+// For releases (non-dev builds) we only include the version number:
+//      Revolution-version
 std::string engine_version_info() {
-    return std::string(EngineNameVersion) + "-" + ENGINE_ARCH_SUFFIX;
+#ifdef ENGINE_ID
+    return ENGINE_ID;
+#else
+    std::stringstream ss;
+    ss << "Revolution-" << version << std::setfill('0');
+
+    if constexpr (version == "dev")
+    {
+        ss << "-";
+#ifdef GIT_DATE
+        ss << stringify(GIT_DATE);
+#else
+        constexpr std::string_view months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
+
+        std::string       month, day, year;
+        std::stringstream date(__DATE__);  // From compiler, format is "Sep 21 2008"
+
+        date >> month >> day >> year;
+        ss << year << std::setw(2) << std::setfill('0') << (1 + months.find(month) / 4)
+           << std::setw(2) << std::setfill('0') << day;
+#endif
+
+        ss << "-";
+
+#ifdef GIT_SHA
+        ss << stringify(GIT_SHA);
+#else
+        ss << "nogit";
+#endif
+    }
+
+    return ss.str();
+#endif
 }
 
 std::string engine_info(bool to_uci) {
@@ -144,10 +187,7 @@ std::string compiler_info() {
 
     std::string compiler = "\nCompiled by                : ";
 
-#if defined(__INTEL_COMPILER)
-    compiler += "Intel C++ ";
-    compiler += stringify(__INTEL_COMPILER);
-#elif defined(__INTEL_LLVM_COMPILER)
+#if defined(__INTEL_LLVM_COMPILER)
     compiler += "ICX ";
     compiler += stringify(__INTEL_LLVM_COMPILER);
 #elif defined(__clang__)
@@ -215,12 +255,6 @@ std::string compiler_info() {
     compiler += " AVX512";
 #endif
     compiler += (HasPext ? " BMI2" : "");
-#if defined(USE_PEXT)
-    compiler += " PEXT";
-#endif
-#if defined(USE_FMA)
-    compiler += " FMA";
-#endif
 #if defined(USE_AVX2)
     compiler += " AVX2";
 #endif

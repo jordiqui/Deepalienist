@@ -1,5 +1,5 @@
 # Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-# Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
+# Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
 #
 # Stockfish is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,21 +25,6 @@ ifeq ($(KERNEL),Linux)
 	OS := $(shell uname -o)
 endif
 
-### Command prefix to run the built executable (e.g. wine, sde, qemu)
-### Backward compatible alias: WINE_PATH (deprecated)
-ifneq ($(strip $(WINE_PATH)),)
-ifeq ($(strip $(RUN_PREFIX)),)
-RUN_PREFIX := $(WINE_PATH)
-endif
-ifeq ($(MAKELEVEL),0)
-ifneq ($(strip $(RUN_PREFIX)),$(strip $(WINE_PATH)))
-$(warning *** Both RUN_PREFIX and WINE_PATH are set; ignoring WINE_PATH. ***)
-else
-$(warning *** WINE_PATH is deprecated; use RUN_PREFIX instead. ***)
-endif
-endif
-endif
-
 ### Target Windows OS
 ifeq ($(OS),Windows_NT)
 	ifneq ($(COMP),ndk)
@@ -47,20 +32,30 @@ ifeq ($(OS),Windows_NT)
 	endif
 else ifeq ($(COMP),mingw)
 	target_windows = yes
-	ifeq ($(RUN_PREFIX),)
-		RUN_PREFIX := $(shell which wine)
+	ifeq ($(WINE_PATH),)
+		WINE_PATH := $(shell which wine)
 	endif
 endif
 
 ### Executable name
-EXE ?= Deepalienist-3.50-270226-$(ARCHSUFFIX).exe
+ifeq ($(target_windows),yes)
+	EXESUF = .exe
+else
+	EXESUF =
+endif
+EXE = revolution$(EXESUF)
+
+NNUE_BIG = nn-5227780996d3.nnue
+NNUE_SMALL = nn-37f18f62d772.nnue
 
 ### Installation dir definitions
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
 ### Built-in benchmark for pgo-builds
-PGOBENCH = $(RUN_PREFIX) ./$(EXE) bench
+EXE_ABS := $(abspath ./$(EXE))
+EXE_DIR := $(dir $(EXE_ABS))
+PGOBENCH = cd "$(EXE_DIR)" && $(WINE_PATH) "$(EXE_ABS)" bench
 
 ### Source and object files
 SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
@@ -68,8 +63,8 @@ SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
 	nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/network.cpp \
 	nnue/features/half_ka_v2_hm.cpp nnue/features/full_threats.cpp \
-	engine.cpp score.cpp memory.cpp learn/learn.cpp \
-	book/book.cpp book/book_manager.cpp book/file_mapping.cpp book/polyglot/polyglot.cpp book/ctg/ctg.cpp
+	book/book_manager.cpp book/book_utils.cpp \
+	experience.cpp engine.cpp score.cpp memory.cpp
 
 HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
 		nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/features/full_threats.h \
@@ -77,11 +72,12 @@ HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.
 		nnue/layers/clipped_relu.h nnue/layers/sqr_clipped_relu.h nnue/nnue_accumulator.h \
 		nnue/nnue_architecture.h nnue/nnue_common.h nnue/nnue_feature_transformer.h nnue/simd.h \
 		position.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
-		tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.h engine.h score.h numa.h memory.h shm.h shm_linux.h
+		tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.h engine.h score.h numa.h memory.h \
+		experience.h experience_compat.h experience_zobrist.h
 
-OBJS = $(notdir $(SRCS:.cpp=.o))
+OBJS = $(SRCS:.cpp=.o)
 
-VPATH = syzygy:nnue:nnue/features:learn:book:book/polyglot:book/ctg
+VPATH = syzygy:nnue:nnue/features
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -141,7 +137,7 @@ endif
 # the user can override with `make ARCH=x86-64-avx512icl SUPPORTED_ARCH=true`
 ifeq ($(ARCH), $(filter $(ARCH), \
                  x86-64-avx512icl x86-64-vnni512 x86-64-avx512 x86-64-avxvnni \
-                 x86-64-FMA3 x86-64-bmi2 x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
+                 x86-64-bmi2 x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
                  x86-64 x86-32-sse41-popcnt x86-32-sse2 x86-32 ppc-64 ppc-64-altivec ppc-64-vsx ppc-32 e2k \
                  armv7 armv7-neon armv8 armv8-dotprod apple-silicon general-64 general-32 riscv64 \
                  loongarch64 loongarch64-lsx loongarch64-lasx))
@@ -152,6 +148,7 @@ endif
 
 optimize = yes
 debug = no
+lto = yes
 sanitize = none
 bits = 64
 prefetch = no
@@ -163,7 +160,6 @@ sse2 = no
 ssse3 = no
 sse41 = no
 avx2 = no
-fma = no
 avxvnni = no
 avx512 = no
 vnni512 = no
@@ -247,17 +243,6 @@ ifeq ($(findstring -avx2,$(ARCH)),-avx2)
 	ssse3 = yes
 	sse41 = yes
 	avx2 = yes
-endif
-
-ifeq ($(filter x86-64-FMA3 x86-64-fma3,$(ARCH)),$(ARCH))
-	popcnt = yes
-	sse = yes
-	sse2 = yes
-	ssse3 = yes
-	sse41 = yes
-	avx2 = yes
-	pext = yes
-	fma = yes
 endif
 
 ifeq ($(findstring -avxvnni,$(ARCH)),-avxvnni)
@@ -449,13 +434,9 @@ ifeq ($(MAKELEVEL),0)
        export ENV_LDFLAGS := $(LDFLAGS)
 endif
 
-override EXTRACXXFLAGS += $(EXTRA_CXXFLAGS)
-override LINKER_FLAGS_FROM_CXXFLAGS := $(filter -fuse-ld=%,$(EXTRACXXFLAGS))
-override EXTRACXXFLAGS := $(filter-out -fuse-ld=%,$(EXTRACXXFLAGS))
-
 CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
-LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS) $(LINKER_FLAGS_FROM_CXXFLAGS)
+LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 
 ifeq ($(COMP),)
 	COMP=gcc
@@ -464,7 +445,7 @@ endif
 ifeq ($(COMP),gcc)
 	comp=gcc
 	CXX=g++
-	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-declarations
+	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-declarations -Wstack-usage=128000
 
 	ifeq ($(arch),$(filter $(arch),armv7 armv8 riscv64))
 		ifeq ($(OS),Android)
@@ -528,7 +509,7 @@ ifeq ($(COMP),clang)
 	endif
 
 	CXXFLAGS += -pedantic -Wextra -Wshadow -Wmissing-prototypes \
-	            -Wconditional-uninitialized -flax-vector-conversions=none
+	            -Wconditional-uninitialized
 
 	ifeq ($(filter $(KERNEL),Darwin OpenBSD FreeBSD),)
 	ifeq ($(target_windows),)
@@ -601,18 +582,9 @@ ifdef COMPCXX
 	CXX=$(COMPCXX)
 endif
 
-# llvm-profdata must be version compatible with the specified CXX (be it clang, or the gcc alias)
-# make -j profile-build CXX=clang++-20 COMP=clang
-# Locate the version in the same directory as the compiler used,
-# with fallback to a generic one if it can't be located
-	LLVM_PROFDATA := $(dir $(realpath $(shell which $(CXX) 2> /dev/null)))llvm-profdata
-# for icx
-ifeq ($(wildcard $(LLVM_PROFDATA)),)
-	LLVM_PROFDATA := $(dir $(realpath $(shell which $(CXX) 2> /dev/null)))/compiler/llvm-profdata
-endif
-ifeq ($(wildcard $(LLVM_PROFDATA)),)
-	LLVM_PROFDATA := llvm-profdata
-endif
+LLVM_PROFDATA ?= llvm-profdata
+CLANG_RESOURCE_DIR := $(shell $(CXX) -print-resource-dir 2>/dev/null)
+CLANG_PROFILE_RT_WIN := $(CLANG_RESOURCE_DIR)/lib/windows/libclang_rt.profile-x86_64.a
 
 ifeq ($(comp),icx)
 	profile_make = icx-profile-make
@@ -635,8 +607,6 @@ ifeq ($(COMP),gcc)
 	ifneq ($(gccisclang),)
 		profile_make = clang-profile-make
 		profile_use = clang-profile-use
-	else
-		CXXFLAGS += -Wstack-usage=128000
 	endif
 endif
 
@@ -738,13 +708,8 @@ endif
 ifeq ($(avx2),yes)
 	CXXFLAGS += -DUSE_AVX2
 	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-		CXXFLAGS += -mavx2 -mbmi
-	endif
-endif
-
-ifeq ($(fma),yes)
-	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-		CXXFLAGS += -mfma
+		# Zen4: AVX2+BMI2+FMA3 bench target.
+		CXXFLAGS += -mavx2 -mbmi2 -mfma
 	endif
 endif
 
@@ -869,54 +834,38 @@ ifneq ($(ARCH), )
 	CXXFLAGS += -DARCH=$(ARCH)
 endif
 
-ifeq ($(ARCH),x86-64)
-	ARCHSUFFIX = x86-64
-else
-	ARCHSUFFIX = $(shell printf '%s' '$(ARCH)' | tr '[:upper:]' '[:lower:]' | sed -E 's/^x86-64-//; s/[^a-z0-9-]//g; s/-//g')
-endif
-
-ifneq ($(ARCHSUFFIX), )
-	CXXFLAGS += -DENGINE_ARCH_SUFFIX=\"$(ARCHSUFFIX)\"
-endif
-
 ### 3.9 Link Time Optimization
 ### This is a mix of compile and link time options because the lto link phase
 ### needs access to the optimization flags.
+ifeq ($(lto),yes)
 ifeq ($(optimize),yes)
-ifeq ($(debug),no)
-	ifneq ($(KERNEL),Darwin)
-		LLD_BIN := $(shell command -v ld.lld 2>/dev/null)
-		ifeq ($(LLD_BIN),)
-			LLD_BIN := $(shell command -v lld 2>/dev/null)
-		endif
-		ifneq ($(LLD_BIN),)
-			ifeq ($(comp),clang)
-				LDFLAGS += -fuse-ld=lld
-			else ifeq ($(comp),gcc)
-				ifneq ($(gccisclang),)
-					LDFLAGS += -fuse-ld=lld
-				endif
+ifeq ($(debug), no)
+	ifeq ($(comp),$(filter $(comp),clang icx))
+		ifeq ($(and $(filter clang,$(comp)),$(filter yes,$(target_windows))),clang)
+			lld_path := $(shell command -v ld.lld 2>/dev/null)
+			ifeq ($(lld_path),)
+				$(error clang LTO requires lld on Windows/MSYS. Install mingw-w64-*-lld or build with lto=no)
 			endif
 		endif
-	endif
-
-	ifeq ($(comp),$(filter $(comp),clang icx))
 		CXXFLAGS += -flto=full
 		ifeq ($(comp),icx)
 			CXXFLAGS += -fwhole-program-vtables
+	                endif
+		ifeq ($(target_windows),yes)
+			CXXFLAGS += -fuse-ld=lld
 		endif
 		LDFLAGS += $(CXXFLAGS)
 
 # GCC and CLANG use different methods for parallelizing LTO and CLANG pretends to be
 # GCC on some systems.
 	else ifeq ($(comp),gcc)
-		ifeq ($(gccisclang),)
-			CXXFLAGS += -flto -flto-partition=one
-			LDFLAGS += $(CXXFLAGS) -flto=jobserver
-		else
-			CXXFLAGS += -flto=full
-			LDFLAGS += $(CXXFLAGS)
-		endif
+	ifeq ($(gccisclang),)
+		CXXFLAGS += -flto -flto-partition=one
+		LDFLAGS += $(CXXFLAGS) -flto=jobserver
+	else
+		CXXFLAGS += -flto=full
+		LDFLAGS += $(CXXFLAGS)
+	endif
 
 # To use LTO and static linking on Windows,
 # the tool chain requires gcc version 10.1 or later.
@@ -926,19 +875,13 @@ ifeq ($(debug),no)
 	endif
 endif
 endif
+endif
 
 ### 3.10 Android 5 can only run position independent executables. Note that this
 ### breaks Android 4.0 and earlier.
 ifeq ($(OS), Android)
 	CXXFLAGS += -fPIE
 	LDFLAGS += -fPIE -pie
-endif
-
-### 3.11 Inline settings
-ifeq ($(optimize), yes)
-	ifeq ($(comp), clang)
-		CXXFLAGS += -Xclang -mllvm -Xclang -inline-threshold=500
-	endif
 endif
 
 ### ==========================================================================
@@ -970,7 +913,6 @@ help:
 	echo "x86-64-avxvnni          > x86 64-bit with vnni 256bit support" && \
 	echo "x86-64-bmi2             > x86 64-bit with bmi2 support" && \
 	echo "x86-64-avx2             > x86 64-bit with avx2 support" && \
-	echo "x86-64-FMA3             > x86 64-bit tuned for Zen-era CPUs (avx2, bmi2, fma3)" && \
 	echo "x86-64-sse41-popcnt     > x86 64-bit with sse41 and popcnt support" && \
 	echo "x86-64-modern           > deprecated, currently x86-64-sse41-popcnt" && \
 	echo "x86-64-ssse3            > x86 64-bit with ssse3 support" && \
@@ -1041,7 +983,21 @@ profile-build: net config-sanity objclean profileclean
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
-	$(PGOBENCH) > PGOBENCH.out 2>&1
+	@src="$(abspath $(NNUE_BIG))";   dst="$(EXE_DIR)$(NNUE_BIG)";   [ "$$src" = "$$dst" ] || cp -f "$$src" "$$dst"
+	@src="$(abspath $(NNUE_SMALL))"; dst="$(EXE_DIR)$(NNUE_SMALL)"; [ "$$src" = "$$dst" ] || cp -f "$$src" "$$dst"
+	@(echo "=== PGOBENCH preflight ==="; \
+	  pwd; \
+	  ls -lh "./$(EXE)" "$(NNUE_BIG)" "$(NNUE_SMALL)") > PGOBENCH.out 2>&1
+	@if [ "$(comp)" = "clang" ]; then \
+	  LLVM_PROFILE_FILE="default.profraw" $(WINE_PATH) "./$(EXE)" bench >> PGOBENCH.out 2>&1 || (echo ""; echo "PGOBENCH FAILED. Last 80 lines:"; tail -n 80 PGOBENCH.out; exit 1); \
+	else \
+	  BIG="$(abspath $(NNUE_BIG))"; SMALL="$(abspath $(NNUE_SMALL))"; \
+	  if [ "$(target_windows)" = "yes" ] && command -v cygpath > /dev/null 2>&1; then \
+	    BIG="$$(cygpath -w "$(abspath $(NNUE_BIG))")"; \
+	    SMALL="$$(cygpath -w "$(abspath $(NNUE_SMALL))")"; \
+	  fi; \
+	  printf "uci\nsetoption name EvalFile value %s\nsetoption name EvalFileSmall value %s\nisready\nbench\nquit\n" "$$BIG" "$$SMALL" | $(WINE_PATH) "./$(EXE)" >> PGOBENCH.out 2>&1 || (echo ""; echo "PGOBENCH FAILED. Last 80 lines:"; tail -n 80 PGOBENCH.out; exit 1); \
+	fi
 	tail -n 4 PGOBENCH.out
 	@echo ""
 	@echo "Step 3/4. Building optimized executable ..."
@@ -1071,7 +1027,7 @@ objclean:
 profileclean:
 	@rm -rf profdir
 	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda *.s PGOBENCH.out
-	@rm -f stockfish.profdata *.profraw
+	@rm -f stockfish.profdata default.profdata default.profraw *.profraw
 	@rm -f stockfish.*args*
 	@rm -f stockfish.*lt*
 	@rm -f stockfish.res
@@ -1079,7 +1035,7 @@ profileclean:
 
 # evaluation network (nnue)
 net:
-	@$(SHELL) ../scripts/net.sh
+	@NNUE_BIG=$(NNUE_BIG) NNUE_SMALL=$(NNUE_SMALL) $(SHELL) ../scripts/net.sh
 
 format:
 	$(CLANG-FORMAT) -i $(SRCS) $(HEADERS) -style=file
@@ -1096,6 +1052,7 @@ config-sanity: net
 	echo "debug: '$(debug)'" && \
 	echo "sanitize: '$(sanitize)'" && \
 	echo "optimize: '$(optimize)'" && \
+	echo "lto: '$(lto)'" && \
 	echo "arch: '$(arch)'" && \
 	echo "bits: '$(bits)'" && \
 	echo "kernel: '$(KERNEL)'" && \
@@ -1131,6 +1088,7 @@ config-sanity: net
 	echo "" && \
 	(test "$(debug)" = "yes" || test "$(debug)" = "no") && \
 	(test "$(optimize)" = "yes" || test "$(optimize)" = "no") && \
+	(test "$(lto)" = "yes" || test "$(lto)" = "no") && \
 	(test "$(SUPPORTED_ARCH)" = "true") && \
 	(test "$(arch)" = "any" || test "$(arch)" = "x86_64" || test "$(arch)" = "i386" || \
 	 test "$(arch)" = "ppc64" || test "$(arch)" = "ppc" || test "$(arch)" = "e2k" || \
@@ -1166,16 +1124,26 @@ misc.o: FORCE
 FORCE:
 
 clang-profile-make:
+	@command -v $(LLVM_PROFDATA) >/dev/null 2>&1 || (echo "ERROR: $(LLVM_PROFDATA) not found"; exit 1)
+	@if [ "$(target_windows)" = "yes" ] && [ ! -f "$(CLANG_PROFILE_RT_WIN)" ]; then \
+		echo "ERROR: missing Clang profile runtime: $(CLANG_PROFILE_RT_WIN)"; \
+		exit 1; \
+	fi
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-generate ' \
-	EXTRALDFLAGS=' -fprofile-generate' \
+	EXTRACXXFLAGS='-fprofile-instr-generate' \
+	EXTRALDFLAGS='-fprofile-instr-generate $(if $(filter yes,$(target_windows)),$(CLANG_PROFILE_RT_WIN))' \
 	all
 
 clang-profile-use:
-	$(XCRUN) $(LLVM_PROFDATA) merge -output=stockfish.profdata *.profraw
+	@command -v $(LLVM_PROFDATA) >/dev/null 2>&1 || (echo "ERROR: $(LLVM_PROFDATA) not found"; exit 1)
+	@if [ "$(target_windows)" = "yes" ] && [ ! -f "$(CLANG_PROFILE_RT_WIN)" ]; then \
+		echo "ERROR: missing Clang profile runtime: $(CLANG_PROFILE_RT_WIN)"; \
+		exit 1; \
+	fi
+	$(XCRUN) $(LLVM_PROFDATA) merge -output=default.profdata default.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-use=stockfish.profdata' \
-	EXTRALDFLAGS='-fprofile-use ' \
+	EXTRACXXFLAGS='-fprofile-instr-use=default.profdata' \
+	EXTRALDFLAGS='-fprofile-instr-use=default.profdata $(if $(filter yes,$(target_windows)),$(CLANG_PROFILE_RT_WIN))' \
 	all
 
 gcc-profile-make:

@@ -14,7 +14,7 @@ import pathlib
 import concurrent.futures
 import tempfile
 import shutil
-import requests
+import urllib.request
 
 CYAN_COLOR = "\033[36m"
 GRAY_COLOR = "\033[2m"
@@ -96,10 +96,10 @@ class Syzygy:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 tarball_path = os.path.join(tmpdirname, f"{file}.tar.gz")
 
-                response = requests.get(url, stream=True)
-                with open(tarball_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
+                with urllib.request.urlopen(url) as response, open(
+                    tarball_path, "wb"
+                ) as f:
+                    shutil.copyfileobj(response, f)
 
                 with tarfile.open(tarball_path, "r:gz") as tar:
                     tar.extractall(tmpdirname)
@@ -125,11 +125,6 @@ class TimeoutException(Exception):
     def __init__(self, message: str, timeout: int):
         self.message = message
         self.timeout = timeout
-
-class UnexpectedOutputException(Exception):
-    def __init__(self, actual: str, expected: str):
-        self.actual   = actual
-        self.expected = expected
 
 
 def timeout_decorator(timeout: float):
@@ -233,11 +228,6 @@ class MiniTestFramework:
             if isinstance(e, TimeoutException):
                 self.print_failure(
                     f" {method} (hit execution limit of {e.timeout} seconds)"
-                )
-
-            if isinstance(e, UnexpectedOutputException):
-                self.print_failure(
-                    f" {method} encountered unexpeted output: \"{e.actual}\" when output matching \"{e.expected}\" was expected"
                 )
 
             if isinstance(e, AssertionError):
@@ -380,15 +370,6 @@ class Stockfish:
         for line in self.readline():
             if callback(line) == True:
                 return
-
-    @timeout_decorator(MAX_TIMEOUT)    
-    def expect_for_line_matching(self, line_match: str, expected: str):
-        for line in self.readline():
-            if fnmatch.fnmatch(line, line_match):
-                if fnmatch.fnmatch(line, expected):
-                    break
-                else:
-                    raise UnexpectedOutputException(line, expected)
 
     def readline(self):
         if not self.process:

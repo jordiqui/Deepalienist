@@ -22,6 +22,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <iterator>
 #include <optional>
 #include <sstream>
@@ -31,7 +32,7 @@
 
 #include "benchmark.h"
 #include "engine.h"
-#include "learn/learn.h"
+#include "experience.h"
 #include "memory.h"
 #include "movegen.h"
 #include "position.h"
@@ -45,6 +46,13 @@ namespace Stockfish {
 constexpr auto BenchmarkCommand = "speedtest";
 
 constexpr auto StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+constexpr std::string_view UciLogo = R"LOGO(   __/\\
+ _ / _ \_\
+(_ )\___/ )
+  / _ _ \\
+ ( (o)o )
+  \  ^  /
+   `---')LOGO";
 template<typename... Ts>
 struct overload: Ts... {
     using Ts::operator()...;
@@ -107,7 +115,7 @@ void UCIEngine::loop() {
         {
             engine.stop();
             engine.wait_for_search_finished();
-            Experience::flush_to_disk(token.c_str());
+            Experience::flush();
         }
 
         // The GUI sends 'ponderhit' to tell that the user has played the expected move.
@@ -119,14 +127,19 @@ void UCIEngine::loop() {
 
         else if (token == "uci")
         {
-            const bool experienceEnabled = static_cast<bool>(engine.get_options()["Experience"]);
-            print_info_string(compiler_info());
-            print_info_string(std::string("Experience enabled: ")
-                              + (experienceEnabled ? "true" : "false"));
-            print_info_string(Experience::stats_line());
+            print_info_string(UciLogo);
+            print_info_string(engine_info());
 
-            sync_cout << "id name " << engine_version_info() << "\n"
-                      << "id author Jorge Ruiz and the Stockfish developers (see AUTHORS file)\n"
+            if (engine.get_options()["Experience Enabled"])
+            {
+                const std::string experienceFile = std::string(engine.get_options()["Experience File"]);
+                if (!experienceFile.empty() && !std::filesystem::exists(experienceFile))
+                    print_info_string("Experience file not found: " + experienceFile);
+
+                print_info_string(Experience::status_summary());
+            }
+
+            sync_cout << "id name " << engine_info(true) << "\n"
                       << engine.get_options() << sync_endl;
 
             sync_cout << "uciok" << sync_endl;
@@ -144,7 +157,10 @@ void UCIEngine::loop() {
         else if (token == "position")
             position(is);
         else if (token == "ucinewgame")
+        {
             engine.search_clear();
+            Experience::new_game();
+        }
         else if (token == "isready")
             sync_cout << "readyok" << sync_endl;
 
@@ -160,10 +176,6 @@ void UCIEngine::loop() {
             sync_cout << engine.visualize() << sync_endl;
         else if (token == "eval")
             engine.trace_eval();
-        else if (token == "showexp")
-            engine.show_experience();
-        else if (token == "book" || token == "poly")
-            engine.show_book_moves();
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")
@@ -180,11 +192,13 @@ void UCIEngine::loop() {
         }
         else if (token == "--help" || token == "help" || token == "--license" || token == "license")
             sync_cout
-              << "\nStockfish is a powerful chess engine for playing and analyzing."
+              << "\n" << engine_version_info()
+              << " is a powerful chess engine for playing and analyzing."
                  "\nIt is released as free software licensed under the GNU GPLv3 License."
-                 "\nStockfish is normally used with a graphical user interface (GUI) and implements"
+                 "\n" << engine_version_info()
+              << " is normally used with a graphical user interface (GUI) and implements"
                  "\nthe Universal Chess Interface (UCI) protocol to communicate with a GUI, an API, etc."
-                 "\nFor any further information, visit https://github.com/official-stockfish/Stockfish#readme"
+                 "\nFor any further information, visit https://github.com/jordiqui/Stockfishjrc#readme"
                  "\nor read the corresponding README.md and Copying.txt files distributed along with this program.\n"
               << sync_endl;
         else if (!token.empty() && token[0] != '#')

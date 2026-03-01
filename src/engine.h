@@ -23,7 +23,6 @@
 #include <cstdint>
 #include <functional>
 #include <map>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,13 +30,13 @@
 #include <vector>
 
 #include "history.h"
+#include "book/book_manager.h"
 #include "nnue/network.h"
 #include "numa.h"
 #include "position.h"
 #include "search.h"
 #include "syzygy/tbprobe.h"  // for Stockfish::Depth
 #include "thread.h"
-#include "book/book_manager.h"
 #include "tt.h"
 #include "ucioption.h"
 
@@ -87,10 +86,10 @@ class Engine {
 
     // network related
 
-    void                                  verify_networks() const;
-    std::unique_ptr<Eval::NNUE::Networks> get_default_networks() const;
-    void                                  load_big_network(const std::string& file);
-    void                                  load_small_network(const std::string& file);
+    void verify_networks() const;
+    void load_networks();
+    void load_big_network(const std::string& file);
+    void load_small_network(const std::string& file);
     void save_network(const std::pair<std::optional<std::string>, std::string> files[2]);
 
     // utility functions
@@ -105,14 +104,11 @@ class Engine {
     std::string                            fen() const;
     void                                   flip();
     std::string                            visualize() const;
-    void                                   show_experience() const;
     std::vector<std::pair<size_t, size_t>> get_bound_thread_count_by_numa_node() const;
     std::string                            get_numa_config_as_string() const;
     std::string                            numa_config_information_as_string() const;
     std::string                            thread_allocation_information_as_string() const;
     std::string                            thread_binding_information_as_string() const;
-    void                                   show_book_moves() const;
-    std::optional<Move>                    pick_book_move() const;
 
    private:
     const std::string binaryDirectory;
@@ -124,9 +120,9 @@ class Engine {
 
     OptionsMap                                         options;
     ThreadPool                                         threads;
-    BookManager                                        bookManager;
     TranspositionTable                                 tt;
     LazyNumaReplicatedSystemWide<Eval::NNUE::Networks> networks;
+    BookManager                                       bookManager;
 
     Search::SearchManager::UpdateContext  updateContext;
     std::function<void(std::string_view)> onVerifyNetworks;

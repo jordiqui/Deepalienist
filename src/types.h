@@ -39,6 +39,7 @@
     #include <cassert>
     #include <cstddef>
     #include <cstdint>
+    #include <cstring>
     #include <type_traits>
     #include "misc.h"
 
@@ -92,6 +93,17 @@
     #endif
 
 namespace Stockfish {
+
+// --- load_as: strict-aliasing safe typed load from byte pointer ---
+// Used by NNUE layer code paths.
+template<typename T>
+static inline T load_as(const void* p) {
+    static_assert(std::is_trivially_copyable_v<T>,
+                  "load_as requires trivially copyable type");
+    T v;
+    std::memcpy(&v, p, sizeof(T));
+    return v;
+}
 
     #ifdef USE_POPCNT
 constexpr bool HasPopCnt = true;
@@ -448,10 +460,6 @@ class Move {
         assert(is_ok());
         return Square(data & 0x3F);
     }
-
-    // Same as to_sq() but without assertion, for branchless code paths
-    // where the result is masked/ignored when move is not ok
-    constexpr Square to_sq_unchecked() const { return Square(data & 0x3F); }
 
     constexpr MoveType type_of() const { return MoveType(data & (3 << 14)); }
 

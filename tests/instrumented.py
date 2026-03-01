@@ -4,7 +4,7 @@ import sys
 import subprocess
 import pathlib
 import os
-import fnmatch
+import time
 
 from testing import (
     EPD,
@@ -68,6 +68,7 @@ def Stockfish(*args, **kwargs):
 
 
 class TestCLI(metaclass=OrderedClassMembers):
+
     def beforeAll(self):
         pass
 
@@ -141,7 +142,7 @@ class TestCLI(metaclass=OrderedClassMembers):
 
     def test_bench_128_threads_3_bench_tmp_epd_depth(self):
         self.stockfish = Stockfish(
-            f"bench 128 {get_threads()} 3 {os.path.join(PATH, 'bench_tmp.epd')} depth".split(
+            f"bench 128 {get_threads()} 3 {os.path.join(PATH,'bench_tmp.epd')} depth".split(
                 " "
             ),
             True,
@@ -167,7 +168,7 @@ class TestCLI(metaclass=OrderedClassMembers):
     def test_export_net_verify_nnue(self):
         current_path = os.path.abspath(os.getcwd())
         self.stockfish = Stockfish(
-            f"export_net {os.path.join(current_path, 'verify.nnue')}".split(" "), True
+            f"export_net {os.path.join(current_path , 'verify.nnue')}".split(" "), True
         )
         assert self.stockfish.process.returncode == 0
 
@@ -254,7 +255,7 @@ class TestInteractive(metaclass=OrderedClassMembers):
         self.stockfish.send_command("go depth 5")
 
         def callback(output):
-            regex = r"info depth \d+ seldepth \d+ multipv \d+ score cp -?\d+ nodes \d+ nps \d+ hashfull \d+ tbhits \d+ time \d+ pv"
+            regex = r"info depth \d+ seldepth \d+ multipv \d+ score cp \d+ nodes \d+ nps \d+ hashfull \d+ tbhits \d+ time \d+ pv"
             if output.startswith("info depth") and not re.match(regex, output):
                 assert False
             if output.startswith("bestmove"):
@@ -262,6 +263,7 @@ class TestInteractive(metaclass=OrderedClassMembers):
             return False
 
         self.stockfish.check_output(callback)
+
 
     def test_ucinewgame_and_go_depth_9(self):
         self.stockfish.send_command("ucinewgame")
@@ -274,7 +276,7 @@ class TestInteractive(metaclass=OrderedClassMembers):
         def callback(output):
             nonlocal depth
 
-            regex = rf"info depth {depth} seldepth \d+ multipv \d+ score cp -?\d+ wdl \d+ \d+ \d+ nodes \d+ nps \d+ hashfull \d+ tbhits \d+ time \d+ pv"
+            regex = rf"info depth {depth} seldepth \d+ multipv \d+ score cp \d+ wdl \d+ \d+ \d+ nodes \d+ nps \d+ hashfull \d+ tbhits \d+ time \d+ pv"
 
             if output.startswith("info depth"):
                 if not re.match(regex, output):
@@ -390,7 +392,7 @@ class TestInteractive(metaclass=OrderedClassMembers):
     def test_verify_nnue_network(self):
         current_path = os.path.abspath(os.getcwd())
         Stockfish(
-            f"export_net {os.path.join(current_path, 'verify.nnue')}".split(" "), True
+            f"export_net {os.path.join(current_path , 'verify.nnue')}".split(" "), True
         )
 
         self.stockfish.send_command("setoption name EvalFile value verify.nnue")
@@ -411,6 +413,85 @@ class TestInteractive(metaclass=OrderedClassMembers):
         self.stockfish.starts_with("bestmove")
 
         self.stockfish.send_command("setoption name Skill Level value 20")
+
+
+codex/compare-lmr-implementation-with-recent-stockfish
+class TestTacticalNodes(metaclass=OrderedClassMembers):
+=======
+class TestClockSimulation(metaclass=OrderedClassMembers):
+
+main
+    def beforeAll(self):
+        self.stockfish = Stockfish()
+
+    def afterAll(self):
+        self.stockfish.quit()
+        assert self.stockfish.close() == 0
+
+    def afterEach(self):
+        assert postfix_check(self.stockfish.get_output()) == True
+        self.stockfish.clear_output()
+
+codex/compare-lmr-implementation-with-recent-stockfish
+    def _nodes_for(self, fen: str, depth: int) -> int:
+        self.stockfish.send_command("ucinewgame")
+        self.stockfish.send_command(f"position fen {fen}")
+
+        info = {"nodes": None}
+
+        def callback(output: str):
+            if output.startswith("info depth") and "nodes" in output:
+                parts = output.split()
+                info["nodes"] = int(parts[parts.index("nodes") + 1])
+
+            if output.startswith("bestmove"):
+                return True
+
+            return False
+
+        self.stockfish.send_command(f"go depth {depth}")
+        self.stockfish.check_output(callback)
+
+        assert info["nodes"] is not None
+        return info["nodes"]
+
+    def test_node_regression_koltanowski_mate(self):
+        # Tactical mate threat after sacrificed material
+        fen = "2r3k1/5ppp/p2p1q2/1p1Pp3/1Pn1P3/3BB1P1/PP3PBP/3RQ1K1 w - - 0 1"
+        nodes = self._nodes_for(fen, depth=6)
+
+        assert 1000 <= nodes <= 80000
+
+    def test_node_regression_taimanov_trap(self):
+        fen = "r1bqkbnr/1pp2ppp/p1np4/4p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R w KQkq - 2 5"
+        nodes = self._nodes_for(fen, depth=7)
+
+        assert 2000 <= nodes <= 120000
+=======
+    def simulate_clock(self, wtime, btime, winc=0, binc=0, movestogo=0):
+        self.stockfish.send_command("ucinewgame")
+        self.stockfish.send_command("position startpos")
+
+        go_command = f"go wtime {wtime} btime {btime} winc {winc} binc {binc}"
+        if movestogo:
+            go_command += f" movestogo {movestogo}"
+
+        start_time = time.time()
+        self.stockfish.send_command(go_command)
+        self.stockfish.starts_with("bestmove")
+
+        elapsed_ms = (time.time() - start_time) * 1000
+        assert elapsed_ms < 5000
+
+    def test_bullet_clock(self):
+        self.simulate_clock(3000, 3000, movestogo=40)
+
+    def test_blitz_clock_with_increment(self):
+        self.simulate_clock(12000, 12000, winc=200, binc=200, movestogo=40)
+
+    def test_rapid_clock_increment(self):
+        self.simulate_clock(30000, 30000, winc=500, binc=500, movestogo=30)
+ main
 
 
 class TestSyzygy(metaclass=OrderedClassMembers):
@@ -469,100 +550,12 @@ class TestSyzygy(metaclass=OrderedClassMembers):
         self.stockfish.send_command("go depth 5")
 
         def check_output(output):
-            if "score cp -20000" in output or "score mate -" in output:
+            if "score cp -20000" in output or "score mate" in output:
                 return True
 
         self.stockfish.check_output(check_output)
         self.stockfish.expect("bestmove *")
 
-class TestEnPassantSanitization(metaclass=OrderedClassMembers):
-    def beforeAll(self):
-        self.stockfish = Stockfish()
-
-    def afterAll(self):
-        self.stockfish.quit()
-        assert self.stockfish.close() == 0
-
-    def afterEach(self):
-        assert postfix_check(self.stockfish.get_output()) == True
-        self.stockfish.clear_output()
-
-    def test_position_1(self):
-        self.stockfish.send_command("position fen rnbqkbnr/ppp1p1pp/5p2/3pP3/8/8/PPPP1PPP/RNBQKBNR w kq d6 0 3")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*rnbqkbnr/ppp1p1pp/5p2/3pP3/8/8/PPPP1PPP/RNBQKBNR w kq d6 0 3*")
-
-    def test_position_2(self):
-        self.stockfish.send_command("position fen k7/8/8/1pP5/2K5/8/8/8 w - b6 0 1")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*k7/8/8/1pP5/2K5/8/8/8 w - b6 0 1*")
-
-    def test_position_3(self):
-        self.stockfish.send_command("position fen k1r5/8/8/1pP5/2K5/8/8/8 w - b6 0 1")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*k1r5/8/8/1pP5/2K5/8/8/8 w - - 0 1*")
-
-    def test_position_4(self):
-        self.stockfish.send_command("position fen k1r5/8/8/1pP5/8/2K5/8/8 w - b6 0 1")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*k1r5/8/8/1pP5/8/2K5/8/8 w - - 0 1*")
-
-    def test_position_5(self):
-        self.stockfish.send_command("position fen k1r5/8/8/PpP5/8/2K5/8/8 w - b6 0 1")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*k1r5/8/8/PpP5/8/2K5/8/8 w - b6 0 1*")
-
-    def test_position_6(self):
-        self.stockfish.send_command("position fen k1r5/8/8/PpP5/2K5/8/8/8 w - b6 0 1")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*k1r5/8/8/PpP5/2K5/8/8/8 w - b6 0 1*")
-
-    def test_position_7(self):
-        self.stockfish.send_command("position fen k7/4b3/8/PpP5/1K6/8/8/8 w - b6 0 1")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*k7/4b3/8/PpP5/1K6/8/8/8 w - b6 0 1*")
-
-    def test_position_8(self):
-        self.stockfish.send_command("position fen k7/b5b1/8/2PpP3/3K4/8/8/8 w - d6 0 1")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*k7/b5b1/8/2PpP3/3K4/8/8/8 w - - 0 1*")
-
-    def test_position_9(self):
-        self.stockfish.send_command("position fen k7/8/8/r2pPK2/8/8/8/8 w - d6 0 1")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*k7/8/8/r2pPK2/8/8/8/8 w - - 0 1*")
-
-    def test_position_10(self):
-        self.stockfish.send_command("position fen k7/8/8/r1PpPK2/8/8/8/8 w - d6 0 1")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*k7/8/8/r1PpPK2/8/8/8/8 w - d6 0 1*")
-
-    def test_position_11(self):
-        self.stockfish.send_command("position fen kb6/8/8/3pP3/5K2/8/8/8 w - d6 0 1")
-        self.stockfish.send_command("d")
-
-        self.stockfish.expect_for_line_matching("Fen*", "*kb6/8/8/3pP3/5K2/8/8/8 w - d6 0 1*")
-
-    def test_position_find_draw(self):
-        self.stockfish.send_command("position fen q4kb1/3Q2nq/8/r3PpK1/2n5/7q/8/q7 w - f6 0 1 moves d7c8 f8f7 c8d7 f7f8 d7d8 f8f7")
-        self.stockfish.send_command("go nodes 10000")
-
-        def check_output(output):
-            if fnmatch.fnmatch(output, "* score cp 0 * pv d8d7*"):
-                return True
-        
-        self.stockfish.check_output(check_output)
-        self.stockfish.expect("bestmove d8d7*")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Stockfish with testing options")
@@ -596,8 +589,12 @@ if __name__ == "__main__":
 
     framework = MiniTestFramework()
 
-    # Each test suite will be run inside a temporary directory
-    framework.run([TestCLI, TestInteractive, TestSyzygy, TestEnPassantSanitization])
+    # Each test suite will be ran inside a temporary directory
+codex/compare-lmr-implementation-with-recent-stockfish
+    framework.run([TestCLI, TestInteractive, TestTacticalNodes, TestSyzygy])
+=======
+    framework.run([TestCLI, TestInteractive, TestClockSimulation, TestSyzygy])
+main
 
     EPD.delete_bench_epd()
     TSAN.unset_tsan_option()

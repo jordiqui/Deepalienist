@@ -30,7 +30,7 @@
 #include <vector>
 
 #include "evaluate.h"
-#include "learn/learn.h"
+#include "experience.h"
 #include "misc.h"
 #include "nnue/network.h"
 #include "nnue/nnue_common.h"
@@ -64,7 +64,10 @@ Engine::Engine(std::optional<std::string> path) :
     numaContext(NumaConfig::from_system(DefaultNumaPolicy)),
     states(new std::deque<StateInfo>(1)),
     threads(),
-    networks(numaContext, get_default_networks()) {
+    networks(numaContext,
+             // Heap-allocate because sizeof(NN::Networks) is large
+             std::make_unique<NN::Networks>(NN::EvalFile{EvalFileDefaultNameBig, "None", ""},
+                                            NN::EvalFile{EvalFileDefaultNameSmall, "None", ""})) {
 
     pos.set(StartFEN, false, &states->back());
 
@@ -105,6 +108,8 @@ Engine::Engine(std::optional<std::string> path) :
     options.add(  //
       "MultiPV", Option(1, 1, MAX_MOVES));
 
+    options.add("Dynamic Evaluation", Option(0, 0, 100));
+
     options.add("Skill Level", Option(20, 0, 20));
 
     options.add("Move Overhead", Option(10, 0, 5000));
@@ -121,51 +126,6 @@ Engine::Engine(std::optional<std::string> path) :
 
     options.add("UCI_ShowWDL", Option(false));
 
-    options.add("Experience", Option(true, [this](const Option&) {
-        LD.init(options);
-        return std::nullopt;
-    }));
-
-    options.add("Read only learning", Option(false, [this](const Option&) {
-        LD.init(options);
-        return std::nullopt;
-    }));
-
-    options.add("Self Q-learning", Option(false, [this](const Option&) {
-        LD.init(options);
-        return std::nullopt;
-    }));
-
-    options.add("Experience Book", Option(false, [this](const Option&) {
-        LD.init(options);
-        return std::nullopt;
-    }));
-
-    options.add("Experience Book Max Moves", Option(100, 1, 100));
-
-    options.add("Experience Book Min Depth", Option(4, 1, 255));
-
-    options.add("Experience File", Option("Deepalienist.exp", [this](const Option&) {
-        LD.init(options);
-        return std::nullopt;
-    }));
-
-    options.add("CTG/BIN Book 1 File", Option("", [this](const Option&) {
-        bookManager.init(0, options);
-        return std::nullopt;
-    }));
-    options.add("Book 1 Width", Option(1, 1, 50));
-    options.add("Book 1 Depth", Option(255, 0, 255));
-    options.add("(CTG) Book 1 Only Green", Option(false));
-
-    options.add("CTG/BIN Book 2 File", Option("", [this](const Option&) {
-        bookManager.init(1, options);
-        return std::nullopt;
-    }));
-    options.add("Book 2 Width", Option(1, 1, 50));
-    options.add("Book 2 Depth", Option(255, 0, 255));
-    options.add("(CTG) Book 2 Only Green", Option(false));
-
     options.add(  //
       "SyzygyPath", Option("", [](const Option& o) {
           Tablebases::init(o);
@@ -177,6 +137,40 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Syzygy50MoveRule", Option(true));
 
     options.add("SyzygyProbeLimit", Option(7, 0, 7));
+
+    options.add("CTG/BIN Book 1 File", Option(""));
+    options.add("Book 1 Depth", Option(0, 0, 255));
+    options.add("Book 1 Width", Option(1, 1, 100));
+    options.add("(CTG) Book 1 Only Green", Option(false));
+    options.add("CTG/BIN Book 2 File", Option(""));
+    options.add("Book 2 Depth", Option(0, 0, 255));
+    options.add("Book 2 Width", Option(1, 1, 100));
+    options.add("(CTG) Book 2 Only Green", Option(false));
+
+    options.add("Experience Enabled", Option(true, [this](const Option&) {
+                    return Experience::update_settings(options);
+                }));
+    options.add("Experience File", Option("experience.exp", [this](const Option&) {
+                    return Experience::update_settings(options);
+                }));
+    options.add("Experience Readonly", Option(false, [this](const Option&) {
+                    return Experience::update_settings(options);
+                }));
+    options.add("Experience Book", Option(false, [this](const Option&) {
+                    return Experience::update_settings(options);
+                }));
+    options.add("Experience Book Width", Option(1, 1, 20, [this](const Option&) {
+                    return Experience::update_settings(options);
+                }));
+    options.add("Experience Book Eval Importance", Option(5, 0, 10, [this](const Option&) {
+                    return Experience::update_settings(options);
+                }));
+    options.add("Experience Book Min Depth", Option(4, 4, 64, [this](const Option&) {
+                    return Experience::update_settings(options);
+                }));
+    options.add("Experience Book Max Moves", Option(16, 1, 100, [this](const Option&) {
+                    return Experience::update_settings(options);
+                }));
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
@@ -190,12 +184,10 @@ Engine::Engine(std::optional<std::string> path) :
           return std::nullopt;
       }));
 
-    threads.clear();
-    threads.ensure_network_replicated();
+    load_networks();
     resize_threads();
-
     bookManager.init(options);
-    LD.init(options);
+    Experience::update_settings(options);
 }
 
 std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
@@ -208,9 +200,18 @@ void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
     verify_networks();
 
-    if (limits.searchmoves.empty())
-        if (const auto bookMove = pick_book_move(); bookMove.has_value())
-            limits.searchmoves = {UCIEngine::move(*bookMove, pos.is_chess960())};
+    if (limits.perft == 0)
+    {
+        const int  bookPly  = pos.game_ply();
+        const Move bookMove = bookManager.probe(pos, options);
+        if (bookMove != Move::none())
+        {
+            const auto uciMove = UCIEngine::move(bookMove, pos.is_chess960());
+            sync_cout << "info string Book move: " << uciMove << sync_endl;
+            sync_cout << "bestmove " << uciMove << sync_endl;
+            return;
+        }
+    }
 
     threads.start_thinking(options, pos, states, limits);
 }
@@ -247,26 +248,6 @@ void Engine::set_on_verify_networks(std::function<void(std::string_view)>&& f) {
 }
 
 void Engine::wait_for_search_finished() { threads.main_thread()->wait_for_search_finished(); }
-
-
-std::optional<Move> Engine::pick_book_move() const {
-    if (!options.count("CTG/BIN Book 1 File"))
-        return std::nullopt;
-
-    const int plyFromRoot = states ? int(states->size()) - 1 : 0;
-    const Move move = bookManager.probe(pos, options, plyFromRoot);
-    return move == Move::none() ? std::nullopt : std::optional<Move>(move);
-}
-
-void Engine::show_book_moves() const {
-    if (!options.count("CTG/BIN Book 1 File"))
-    {
-        sync_cout << "no book moves" << sync_endl;
-        return;
-    }
-
-    bookManager.show_moves(pos, options);
-}
 
 void Engine::set_position(const std::string& fen, const std::vector<std::string>& moves) {
     // Drop the old state and create a new one
@@ -365,16 +346,13 @@ void Engine::verify_networks() const {
     }
 }
 
-std::unique_ptr<Eval::NNUE::Networks> Engine::get_default_networks() const {
-
-    auto networks_ =
-      std::make_unique<NN::Networks>(NN::EvalFile{EvalFileDefaultNameBig, "None", ""},
-                                     NN::EvalFile{EvalFileDefaultNameSmall, "None", ""});
-
-    networks_->big.load(binaryDirectory, "");
-    networks_->small.load(binaryDirectory, "");
-
-    return networks_;
+void Engine::load_networks() {
+    networks.modify_and_replicate([this](NN::Networks& networks_) {
+        networks_.big.load(binaryDirectory, options["EvalFile"]);
+        networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
+    });
+    threads.clear();
+    threads.ensure_network_replicated();
 }
 
 void Engine::load_big_network(const std::string& file) {
@@ -422,8 +400,6 @@ std::string Engine::visualize() const {
     ss << pos;
     return ss.str();
 }
-
-void Engine::show_experience() const { LD.show_exp(pos); }
 
 int Engine::get_hashfull(int maxAge) const { return tt.hashfull(maxAge); }
 
