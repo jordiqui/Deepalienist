@@ -39,13 +39,6 @@ namespace Stockfish {
 
 namespace {
 
-// Version number or dev.
-#ifdef ENGINE_VERSION
-constexpr std::string_view version = ENGINE_VERSION;
-#else
-constexpr std::string_view version = "4.90-210226";
-#endif
-
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
 // can toggle the logging of std::cout and std::cin at runtime whilst preserving
