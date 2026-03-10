@@ -43,8 +43,8 @@ ifeq ($(target_windows),yes)
 else
 	EXESUF =
 endif
-BUILD_ARCH_TAG = unknown
-EXE = Deepalienist-3.60-010326-$(BUILD_ARCH_TAG)$(EXESUF)
+BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
+EXE = Deepalienist-3.70-100326-$(BUILD_ARCH_TAG)$(EXESUF)
 
 NNUE_BIG = nn-9a0cc2a62c52.nnue
 NNUE_SMALL = nn-47fc8b7fff06.nnue
@@ -157,8 +157,6 @@ endif
 # Build-time tag used for UCI id name and binary naming
 ifeq ($(ARCH),x86-64-sse41-popcnt)
 	BUILD_ARCH_TAG = sse41popcnt
-else ifeq ($(ARCH),x86-64-avx2)
-	BUILD_ARCH_TAG = avx2
 else ifeq ($(ARCH),x86-64-bmi2)
 	BUILD_ARCH_TAG = fma3
 endif
