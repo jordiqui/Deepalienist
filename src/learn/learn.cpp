@@ -64,10 +64,10 @@ std::filesystem::path experience_path(const std::string& filename) {
 
 std::string current_experience_file_name(const Stockfish::OptionsMap* options) {
     if (!options)
-        return "Deepalienist.exp";
+        return "experience.exp";
 
     const std::string configured = static_cast<std::string>((*options)["Experience File"]);
-    return configured.empty() ? "Deepalienist.exp" : configured;
+    return configured.empty() ? "experience.exp" : configured;
 }
 
 bool atomic_rename(const std::filesystem::path& source, const std::filesystem::path& dest) {

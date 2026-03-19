@@ -198,7 +198,7 @@ void UCIEngine::loop() {
                  "\n" << engine_version_info()
               << " is normally used with a graphical user interface (GUI) and implements"
                  "\nthe Universal Chess Interface (UCI) protocol to communicate with a GUI, an API, etc."
-                 "\nFor any further information, visit https://github.com/jordiqui/Stockfishjrc#readme"
+                 "\nFor any further information, visit https://github.com/jordiqui/Deepalienist#readme"
                  "\nor read the corresponding README.md and Copying.txt files distributed along with this program.\n"
               << sync_endl;
         else if (!token.empty() && token[0] != '#')

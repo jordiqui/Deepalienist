@@ -1,20 +1,20 @@
-# Revolution-4.80-120226
+# Deepalienist-3.80-190326
 
 <p align="center">
-  <img src="assets/revolution-logo.svg" alt="Revolution UCI Chess Engine logo featuring a minimalist French tricolor cockade" width="360" />
+  <img src="assets/revolution-logo.svg" alt="Deepalienist UCI chess engine logo featuring a minimalist French tricolor cockade" width="360" />
 </p>
 
-Revolution UCI Chess Engines is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Revolution-4.80-120226** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
+Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-3.80-190326** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
 
 ## Overview
 
-Revolution is a free and strong UCI chess engine derived from Stockfish that analyzes chess positions and computes optimal moves. The project focuses on experimenting with new ideas and structural changes while retaining compatibility with existing UCI-compliant graphical user interfaces (GUIs).
+Deepalienist is a free and strong UCI chess engine derived from Stockfish that analyzes chess positions and computes optimal moves. The project focuses on experimenting with new ideas and structural changes while retaining compatibility with existing UCI-compliant graphical user interfaces (GUIs).
 
-Like Stockfish, Revolution does not include a graphical user interface. To use the engine you need a UCI-compatible GUI such as Fritz, Arena, Cute Chess, or similar. Consult the documentation of your preferred GUI for instructions on how to load Revolution.
+Like Stockfish, Deepalienist does not include a graphical user interface. To use the engine you need a UCI-compatible GUI such as Fritz, Arena, Cute Chess, or similar. Consult the documentation of your preferred GUI for instructions on how to load Deepalienist.
 
 ## BrainLearn experience file integration
 
-Revolution integrates the BrainLearn persistent hash learning system so that the engine can reuse knowledge collected from previous games. The learning data is saved in an `experience.exp` file that stores one or more positions using the following BrainLearn-defined structure:
+Deepalienist integrates the BrainLearn persistent hash learning system so that the engine can reuse knowledge collected from previous games. The learning data is saved in an `experience.exp` file that stores one or more positions using the following BrainLearn-defined structure:
 
 1. best move
 2. board signature (hash key)
@@ -24,7 +24,7 @@ Revolution integrates the BrainLearn persistent hash learning system so that the
 
 The `experience.exp` file is loaded into an internal hash table when the engine starts and is updated whenever BrainLearn receives a `quit` or `stop` UCI command. Learning is active from the start of each game and whenever eight or fewer pieces remain on the board. Positions whose best score is found at a depth of at least four plies—following the BrainLearn aspiration window—are written back to the experience file.
 
-At load time Revolution automatically merges every file named according to the convention `<fileType><qualityIndex>.exp`, where `fileType` is `experience` and `qualityIndex` is an integer beginning at 0 (0 represents the best quality as assigned by the user). Legacy `.bin` experience files can be used by renaming them with the `.exp` extension, which frees the `.bin` extension for standard opening books.
+At load time Deepalienist automatically merges every file named according to the convention `<fileType><qualityIndex>.exp`, where `fileType` is `experience` and `qualityIndex` is an integer beginning at 0 (0 represents the best quality as assigned by the user). Legacy `.bin` experience files can be used by renaming them with the `.exp` extension, which frees the `.bin` extension for standard opening books.
 
 ### Learning-related UCI options
 
@@ -35,11 +35,11 @@ At load time Revolution automatically merges every file named according to the c
 - **Experience Book Min Depth** (integer, default `4`, minimum `1`, maximum `255`): sets the minimum stored depth for moves to qualify for book selection.
 - **quickresetexp** (UCI token): aligns the stored performance values with the defaults when the learning file needs to be reset quickly.
 
-For further documentation and community resources, visit the BrainLearn project page: <https://github.com/amchess/BrainLearn>. Revolution thanks the BrainLearn authors for making the experience-file integration possible.
+For further documentation and community resources, visit the BrainLearn project page: <https://github.com/amchess/BrainLearn>. Deepalienist thanks the BrainLearn authors for making the experience-file integration possible.
 
 ## Book management
 
-Revolution implements a flexible book management system inspired by Polyfish and BrainLearn, following the loading priority **BIN → CTG → live book**. Two book slots are available so that you can combine different opening sources or keep fallback material handy when your primary book runs out of moves.
+Deepalienist implements a flexible book management system inspired by Polyfish and BrainLearn, following the loading priority **BIN → CTG → live book**. Two book slots are available so that you can combine different opening sources or keep fallback material handy when your primary book runs out of moves.
 
 ### CTG/BIN Book 1 File
 
@@ -55,7 +55,7 @@ Defines the maximum number of plies played from the book before switching to sea
 
 ### (CTG) Book 1 Only Green
 
-Only applies to `.ctg` books. When `true`, Revolution restricts choices to book moves marked as Green. If no such move exists in the position, the engine falls back to regular search. This option has no effect when the selected book is Polyglot (`.bin`).
+Only applies to `.ctg` books. When `true`, Deepalienist restricts choices to book moves marked as Green. If no such move exists in the position, the engine falls back to regular search. This option has no effect when the selected book is Polyglot (`.bin`).
 
 ### CTG/BIN Book 2 File
 
@@ -75,7 +75,7 @@ Same behaviour as **(CTG) Book 1 Only Green**, but for the second book slot.
 
 ### Book-related UCI commands
 
-Revolution supports every UCI command provided by BrainLearn; the full list is available in the upstream documentation. In addition, the following commands expose book functionality:
+Deepalienist supports every UCI command provided by BrainLearn; the full list is available in the upstream documentation. In addition, the following commands expose book functionality:
 
 - `book`: prints all moves available in the currently configured books along with statistics.
 - `position startpos` followed by `poly`: displays Polyglot-style book information for the starting position (or the position you supply).
@@ -139,7 +139,7 @@ Polyglot book 2: MyWideBook.bin
 
 ### Notes about CTG books
 
-Chessbase does not publish official specifications for CTG books. Revolution therefore relies on community reverse engineering, primarily the documentation available at <https://github.com/amchess/BrainLearn>. The current implementation can probe CTG books for moves, but it is not identical to Chessbase products. Known limitations include:
+Chessbase does not publish official specifications for CTG books. Deepalienist therefore relies on community reverse engineering, primarily the documentation available at <https://github.com/amchess/BrainLearn>. The current implementation can probe CTG books for moves, but it is not identical to Chessbase products. Known limitations include:
 
 - Underpromotion is unsupported; every promotion defaults to a queen.
 - Positions with more than two queens are unsupported.
@@ -151,7 +151,7 @@ Despite these limitations, the engine selects the best move in the vast majority
 
 ## Files
 
-This distribution of Revolution consists of the following files:
+This distribution of Deepalienist consists of the following files:
 
 - `README.md`: the file you are currently reading.
 - `Copying.txt`: the GNU General Public License version 3.
@@ -161,7 +161,7 @@ This distribution of Revolution consists of the following files:
 
 ## Compiling
 
-Revolution supports 32-bit and 64-bit CPUs and the same hardware instruction sets as Stockfish. On Unix-like systems you can compile the engine from the `src` directory with:
+Deepalienist supports 32-bit and 64-bit CPUs and the same hardware instruction sets as Stockfish. On Unix-like systems you can compile the engine from the `src` directory with:
 
 ```
 cd src
@@ -172,7 +172,7 @@ Run `make help` inside `src` to see all available build targets and configuratio
 
 ### Matriz de builds y enlazador
 
-Revolution sigue la matriz de arquitecturas de Stockfish y permite compilar los perfiles principales con **gcc** o **clang**, usando el enlazador por defecto o `lld` cuando se trabaja con Clang. Ejemplos representativos:
+Deepalienist sigue la matriz de arquitecturas de Stockfish y permite compilar los perfiles principales con **gcc** o **clang**, usando el enlazador por defecto o `lld` cuando se trabaja con Clang. Ejemplos representativos:
 
 | Perfil | Compilador | Enlazador | Ejemplo |
 | --- | --- | --- | --- |
@@ -197,7 +197,7 @@ make -j build ARCH=x86-64-bmi2 COMP=gcc SSE41_POPCNT_PREFETCH=yes LTO=yes build
 
 El fichero de referencia `src/bench_prefetch_on.txt` documenta los incrementos de nodos/segundo obtenidos en posiciones tácticas con el prefetch activado.
 
-Tras compilar, valida la mejora con el benchmark integrado ejecutando `./revolution bench` desde `src/`. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
+Tras compilar, valida la mejora con el benchmark integrado ejecutando `./Deepalienist-3.80-190326-sse41popcnt bench` desde `src/` o el binario que corresponda a la arquitectura elegida. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
 
 ### Building for AMD Hawk Point CPUs with FMA3
 
@@ -213,12 +213,24 @@ make -j profile-build ARCH=x86-64-FMA3 COMP=clang EXTRALDFLAGS="-fuse-ld=lld"
 
 El objetivo `ARCH=x86-64-FMA3` habilita las instrucciones FMA3 necesarias para aprovechar el hardware de Hawk Point.
 
+
+## Branding and executable names
+
+Every compiled binary now follows the `Deepalienist-3.80-190326-<arch>` naming scheme so the executable name clearly identifies the instruction-set target used at compile time. Typical examples include:
+
+- `Deepalienist-3.80-190326-sse41popcnt.exe`
+- `Deepalienist-3.80-190326-avx2.exe`
+- `Deepalienist-3.80-190326-avx512.exe`
+- `Deepalienist-3.80-190326-fma3.exe`
+
+The same architecture suffix is also reported through the engine UCI identification string, so GUIs show names such as `Deepalienist-3.80-190326-sse41popcnt`, `Deepalienist-3.80-190326-avx2`, or `Deepalienist-3.80-190326-avx512`.
+
 ## Contributing
 
 Contributions follow the Stockfish development process. Please review `CONTRIBUTING.md` for guidelines and use the public testing infrastructure (Fishtest) when applicable.
 
 ## License
 
-Revolution is free software distributed under the **GNU General Public License version 3**. When redistributing Revolution you must include the license and the complete corresponding source code for the binaries you provide. Changes based on this code must also remain under the GPL v3.
+Deepalienist is free software distributed under the **GNU General Public License version 3**. When redistributing Deepalienist you must include the license and the complete corresponding source code for the binaries you provide. Changes based on this code must also remain under the GPL v3.
 
-Revolution acknowledges the Stockfish project and all of its contributors. The engine remains compatible with the original Stockfish license requirements and credits the Stockfish developers in the AUTHORS file.
+Deepalienist acknowledges the Stockfish project and all of its contributors. The engine remains compatible with the original Stockfish license requirements and credits the Stockfish developers in the AUTHORS file.

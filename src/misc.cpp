@@ -120,7 +120,7 @@ std::string engine_version_info() {
     constexpr auto buildArchTag = "unknown";
 #endif
 
-    return std::string("Deepalienist-3.70-100326-") + buildArchTag;
+    return std::string("Deepalienist-3.80-190326-") + buildArchTag;
 #endif
 }
 
