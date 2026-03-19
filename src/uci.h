@@ -57,8 +57,11 @@ class UCIEngine {
    private:
     Engine      engine;
     CommandLine cli;
+    bool        suppressNonEssentialInfo = false;
+    TimePoint   lastInfoEmissionTimeMs   = 0;
 
     static void print_info_string(std::string_view str);
+    static bool should_suppress_non_essential_info(const Search::LimitsType& limits);
 
     void          go(std::istringstream& is);
     void          bench(std::istream& args);
@@ -67,10 +70,10 @@ class UCIEngine {
     void          setoption(std::istringstream& is);
     std::uint64_t perft(const Search::LimitsType&);
 
-    static void on_update_no_moves(const Engine::InfoShort& info);
-    static void on_update_full(const Engine::InfoFull& info, bool showWDL);
-    static void on_iter(const Engine::InfoIter& info);
-    static void on_bestmove(std::string_view bestmove, std::string_view ponder);
+    void on_update_no_moves(const Engine::InfoShort& info);
+    void on_update_full(const Engine::InfoFull& info, bool showWDL);
+    void on_iter(const Engine::InfoIter& info);
+    void on_bestmove(std::string_view bestmove, std::string_view ponder);
 
     void init_search_update_listeners();
 };
