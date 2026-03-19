@@ -86,11 +86,11 @@ UCIEngine::UCIEngine(int argc, char** argv) :
 }
 
 void UCIEngine::init_search_update_listeners() {
-    engine.set_on_iter([](const auto& i) { on_iter(i); });
-    engine.set_on_update_no_moves([](const auto& i) { on_update_no_moves(i); });
+    engine.set_on_iter([this](const auto& i) { on_iter(i); });
+    engine.set_on_update_no_moves([this](const auto& i) { on_update_no_moves(i); });
     engine.set_on_update_full(
       [this](const auto& i) { on_update_full(i, engine.get_options()["UCI_ShowWDL"]); });
-    engine.set_on_bestmove([](const auto& bm, const auto& p) { on_bestmove(bm, p); });
+    engine.set_on_bestmove([this](const auto& bm, const auto& p) { on_bestmove(bm, p); });
     engine.set_on_verify_networks([](const auto& s) { print_info_string(s); });
 }
 
@@ -250,11 +250,21 @@ Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
 void UCIEngine::go(std::istringstream& is) {
 
     Search::LimitsType limits = parse_limits(is);
+    suppressNonEssentialInfo  = should_suppress_non_essential_info(limits);
+    lastInfoEmissionTimeMs    = 0;
 
     if (limits.perft)
         perft(limits);
     else
         engine.go(limits);
+}
+
+bool UCIEngine::should_suppress_non_essential_info(const Search::LimitsType& limits) {
+    constexpr TimePoint LowTimeThresholdMs = 1000;
+
+    return (limits.movetime && limits.movetime <= LowTimeThresholdMs)
+        || (limits.time[WHITE] && limits.time[WHITE] <= LowTimeThresholdMs)
+        || (limits.time[BLACK] && limits.time[BLACK] <= LowTimeThresholdMs);
 }
 
 void UCIEngine::bench(std::istream& args) {
@@ -642,10 +652,24 @@ Move UCIEngine::to_move(const Position& pos, std::string str) {
 }
 
 void UCIEngine::on_update_no_moves(const Engine::InfoShort& info) {
+    if (suppressNonEssentialInfo)
+        return;
+
     sync_cout << "info depth " << info.depth << " score " << format_score(info.score) << sync_endl;
 }
 
 void UCIEngine::on_update_full(const Engine::InfoFull& info, bool showWDL) {
+    if (suppressNonEssentialInfo)
+    {
+        constexpr TimePoint InfoThrottleMs = 200;
+        const TimePoint     infoTimeMs     = TimePoint(info.timeMs);
+
+        if (infoTimeMs < lastInfoEmissionTimeMs + InfoThrottleMs)
+            return;
+
+        lastInfoEmissionTimeMs = infoTimeMs;
+    }
+
     std::stringstream ss;
 
     ss << "info";
@@ -671,6 +695,9 @@ void UCIEngine::on_update_full(const Engine::InfoFull& info, bool showWDL) {
 }
 
 void UCIEngine::on_iter(const Engine::InfoIter& info) {
+    if (suppressNonEssentialInfo)
+        return;
+
     std::stringstream ss;
 
     ss << "info";
@@ -682,10 +709,10 @@ void UCIEngine::on_iter(const Engine::InfoIter& info) {
 }
 
 void UCIEngine::on_bestmove(std::string_view bestmove, std::string_view ponder) {
-    sync_cout << "bestmove " << bestmove;
-    if (!ponder.empty())
-        std::cout << " ponder " << ponder;
-    std::cout << sync_endl;
+    if (ponder.empty())
+        sync_cout << "bestmove " << bestmove << sync_endl;
+    else
+        sync_cout << "bestmove " << bestmove << " ponder " << ponder << sync_endl;
 }
 
 }  // namespace Stockfish
