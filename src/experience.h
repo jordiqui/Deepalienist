@@ -54,6 +54,14 @@ void flush();
 // UCI "info string" message.
 std::string status_summary();
 
+// Returns a human readable summary of optional audit/instrumentation metrics.
+// Developer note: lifetime counters reset when audit is enabled/disabled or the
+// experience file is reloaded; since-newgame counters additionally reset on
+// ucinewgame/reset. Experience Book Min Visits gates only experience-book
+// eligibility and does not affect parsing, saving, ranking, reorder policy, or
+// general search semantics.
+std::string audit_summary();
+
 }  // namespace Experience
 }  // namespace Stockfish
 
