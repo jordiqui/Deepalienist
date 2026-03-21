@@ -226,9 +226,9 @@ Engine::Engine(std::optional<std::string> path) :
                     return Experience::update_settings(options);
                 }));
     options.add(  //
-      "Experience Audit Report", Option([this](const Option&) {
+      "Experience Audit Report", Option(Option::OnChange([](const Option&) {
           return Experience::audit_summary();
-      }));
+      })));
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
