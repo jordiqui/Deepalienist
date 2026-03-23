@@ -219,16 +219,6 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Experience Book Max Moves", Option(16, 1, 100, [this](const Option&) {
                     return Experience::update_settings(options);
                 }));
-    options.add("Experience Book Min Visits", Option(1, 1, 65535, [this](const Option&) {
-                    return Experience::update_settings(options);
-                }));
-    options.add("Experience Audit Enabled", Option(false, [this](const Option&) {
-                    return Experience::update_settings(options);
-                }));
-    options.add(  //
-      "Experience Audit Report", Option(Option::OnChange([](const Option&) {
-          return Experience::audit_summary();
-      })));
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
