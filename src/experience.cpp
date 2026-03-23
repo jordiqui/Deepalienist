@@ -1,7 +1,6 @@
 #include "experience.h"
 
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -19,7 +18,6 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
-#include <cmath>
 #include <vector>
 #include <cstdlib>
 #include <system_error>
@@ -52,79 +50,15 @@ struct Settings {
     int         bookEvalImportance = 5;
     Depth       bookMinDepth       = 4;
     int         bookMaxMoves       = 16;
-    int         bookMinVisits      = 1;
     std::string file               = "experience.exp";
     std::size_t maxEntries         = 200000;
     Value       minScore           = Value(20);
-    bool        auditEnabled       = false;
 };
 
 struct Stats {
     std::size_t uniqueMoves    = 0;
     std::size_t duplicateMoves = 0;
     std::size_t totalPositions = 0;
-};
-
-struct Distribution {
-    static constexpr std::size_t BucketCount = 8;
-    std::array<std::uint64_t, BucketCount> buckets{};
-
-    void add(int value) {
-        const int absValue = std::abs(value);
-        const std::size_t index = absValue < 25   ? 0
-                                : absValue < 50   ? 1
-                                : absValue < 100  ? 2
-                                : absValue < 200  ? 3
-                                : absValue < 400  ? 4
-                                : absValue < 800  ? 5
-                                : absValue < 1600 ? 6
-                                                  : 7;
-        ++buckets[index];
-    }
-
-    [[nodiscard]] std::string to_string(std::string_view label) const {
-        static constexpr std::array<std::string_view, BucketCount> Ranges = {
-          "[0,24]", "[25,49]", "[50,99]", "[100,199]", "[200,399]", "[400,799]", "[800,1599]",
-          "[1600,+)"};
-
-        std::ostringstream oss;
-        oss << label << '=';
-        for (std::size_t i = 0; i < BucketCount; ++i)
-        {
-            if (i)
-                oss << ',';
-            oss << Ranges[i] << ':' << buckets[i];
-        }
-        return oss.str();
-    }
-};
-
-struct ProbeCounters {
-    std::uint64_t probes = 0;
-    std::uint64_t hits = 0;
-    std::uint64_t filteredHits = 0;
-    std::uint64_t minVisitsRejected = 0;
-    std::uint64_t rootReorders = 0;
-    std::uint64_t entriesWritten = 0;
-
-    void clear() { *this = {}; }
-};
-
-struct AuditMetrics {
-    std::uint64_t loadCount = 0;
-    std::uint64_t saveCount = 0;
-    std::uint64_t loadMicros = 0;
-    std::uint64_t saveMicros = 0;
-    std::uint64_t finishedGames = 0;
-    std::uint64_t sessionEntriesWritten = 0;
-    std::uint64_t currentGameEntriesWritten = 0;
-    ProbeCounters lifetime;
-    ProbeCounters sinceNewGame;
-    Distribution scoreDistribution;
-    Distribution depthDistribution;
-    Distribution visitsDistribution;
-
-    void clear() { *this = {}; }
 };
 
 Settings settings;
@@ -136,7 +70,6 @@ bool                                                  dirty                = fal
 std::size_t                                           pendingFlush         = 0;
 constexpr std::size_t                                 FlushInterval        = 64;
 Stats                                                 stats;
-AuditMetrics                                          auditMetrics;
 std::string                                           lastStatus;
 bool                                                  settingsInitialized = false;
 
@@ -219,98 +152,6 @@ void merge_entry_for_load(std::uint64_t key, const Entry& entry, Stats& loadStat
     touch_lru(key);
 }
 
-
-void record_entry_distributions(const Entry& entry) {
-    if (!settings.auditEnabled)
-        return;
-
-    auditMetrics.scoreDistribution.add(int(entry.score));
-    auditMetrics.depthDistribution.add(int(entry.depth));
-    auditMetrics.visitsDistribution.add(int(entry.visits));
-}
-
-void reset_audit_metrics_unlocked() {
-    auditMetrics.clear();
-}
-
-void reset_since_newgame_counters_unlocked() {
-    if (!settings.auditEnabled)
-        return;
-
-    auditMetrics.sinceNewGame.clear();
-    auditMetrics.currentGameEntriesWritten = 0;
-}
-
-void finalize_game_metrics_unlocked() {
-    if (!settings.auditEnabled)
-        return;
-
-    if (auditMetrics.currentGameEntriesWritten > 0 || auditMetrics.finishedGames > 0)
-        ++auditMetrics.finishedGames;
-
-    reset_since_newgame_counters_unlocked();
-}
-
-std::string format_audit_summary_unlocked() {
-    if (!settings.auditEnabled)
-        return "Experience audit disabled (default behavior unchanged)";
-
-    const auto avgLoad = auditMetrics.loadCount
-      ? static_cast<double>(auditMetrics.loadMicros) / static_cast<double>(auditMetrics.loadCount)
-      : 0.0;
-    const auto avgSave = auditMetrics.saveCount
-      ? static_cast<double>(auditMetrics.saveMicros) / static_cast<double>(auditMetrics.saveCount)
-      : 0.0;
-    const auto lifetimeProbeHitRate = auditMetrics.lifetime.probes
-      ? (100.0 * static_cast<double>(auditMetrics.lifetime.hits)
-         / static_cast<double>(auditMetrics.lifetime.probes))
-      : 0.0;
-    const auto lifetimeFilteredHitRate = auditMetrics.lifetime.probes
-      ? (100.0 * static_cast<double>(auditMetrics.lifetime.filteredHits)
-         / static_cast<double>(auditMetrics.lifetime.probes))
-      : 0.0;
-    const auto newgameProbeHitRate = auditMetrics.sinceNewGame.probes
-      ? (100.0 * static_cast<double>(auditMetrics.sinceNewGame.hits)
-         / static_cast<double>(auditMetrics.sinceNewGame.probes))
-      : 0.0;
-    const auto newgameFilteredHitRate = auditMetrics.sinceNewGame.probes
-      ? (100.0 * static_cast<double>(auditMetrics.sinceNewGame.filteredHits)
-         / static_cast<double>(auditMetrics.sinceNewGame.probes))
-      : 0.0;
-    const auto entriesPerGame = auditMetrics.finishedGames
-      ? static_cast<double>(auditMetrics.sessionEntriesWritten)
-          / static_cast<double>(auditMetrics.finishedGames)
-      : static_cast<double>(auditMetrics.sessionEntriesWritten);
-
-    std::ostringstream oss;
-    oss << "Experience audit: timing scope=lifetime_since_enable_or_reload load_count="
-        << auditMetrics.loadCount << " load_total_us=" << auditMetrics.loadMicros
-        << " load_avg_us=" << std::fixed << std::setprecision(1) << avgLoad
-        << " save_count=" << auditMetrics.saveCount << " save_total_us="
-        << auditMetrics.saveMicros << " save_avg_us=" << avgSave << "\n"
-        << "Experience audit: counters lifetime probes=" << auditMetrics.lifetime.probes
-        << " hits=" << auditMetrics.lifetime.hits << " filtered_hits="
-        << auditMetrics.lifetime.filteredHits << " min_visits_rejected="
-        << auditMetrics.lifetime.minVisitsRejected << " root_reorders="
-        << auditMetrics.lifetime.rootReorders << " entries_written="
-        << auditMetrics.sessionEntriesWritten << " hit_rate=" << lifetimeProbeHitRate
-        << "% filtered_hit_rate=" << lifetimeFilteredHitRate << "% finished_games="
-        << auditMetrics.finishedGames << " entries_per_game=" << entriesPerGame << "\n"
-        << "Experience audit: counters since_newgame probes=" << auditMetrics.sinceNewGame.probes
-        << " hits=" << auditMetrics.sinceNewGame.hits << " filtered_hits="
-        << auditMetrics.sinceNewGame.filteredHits << " min_visits_rejected="
-        << auditMetrics.sinceNewGame.minVisitsRejected << " root_reorders="
-        << auditMetrics.sinceNewGame.rootReorders << " entries_written="
-        << auditMetrics.currentGameEntriesWritten << " hit_rate=" << newgameProbeHitRate
-        << "% filtered_hit_rate=" << newgameFilteredHitRate
-        << "% reset=ucinewgame_or_enable_disable_reload\n"
-        << "Experience audit: reset_note lifetime counters reset when audit is enabled, disabled, or the experience file is reloaded; since_newgame counters reset on ucinewgame/reset and on those same lifecycle events.\n"
-        << auditMetrics.scoreDistribution.to_string("score_abs_cp") << "\n"
-        << auditMetrics.depthDistribution.to_string("depth") << "\n"
-        << auditMetrics.visitsDistribution.to_string("visits");
-    return oss.str();
-}
-
 std::string format_status_unlocked() {
     if (!settings.enabled)
         return "Experience disabled";
@@ -355,7 +196,6 @@ void enforce_limit() {
             table.erase(it);
         }
     }
-
 }
 
 void ensure_directory_exists(const std::string& file) {
@@ -378,8 +218,6 @@ void save_table_unlocked(const std::string& file) {
 
     ensure_directory_exists(file);
 
-    const auto saveStart = std::chrono::steady_clock::now();
-
     std::ofstream out(file, std::ios::binary | std::ios::trunc);
     if (!out)
         return;
@@ -399,14 +237,6 @@ void save_table_unlocked(const std::string& file) {
             out << key << ' ' << unsigned(e.bestMove.raw()) << ' ' << int(e.score) << ' '
                 << int(e.eval) << ' ' << int(e.depth) << ' ' << unsigned(e.visits) << '\n';
         }
-    }
-
-    if (settings.auditEnabled)
-    {
-        const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-          std::chrono::steady_clock::now() - saveStart);
-        ++auditMetrics.saveCount;
-        auditMetrics.saveMicros += static_cast<std::uint64_t>(elapsed.count());
     }
 }
 
@@ -539,8 +369,6 @@ bool load_hypnos_binary(std::istream& in, Stats& loadStats) {
 }
 
 void load_table_unlocked(const std::string& file) {
-    const auto loadStart = std::chrono::steady_clock::now();
-
     table.clear();
     lru.clear();
     lruIndex.clear();
@@ -548,8 +376,6 @@ void load_table_unlocked(const std::string& file) {
     pendingFlush = 0;
     stats        = {};
     lastStatus.clear();
-    reset_audit_metrics_unlocked();
-    reset_since_newgame_counters_unlocked();
 
     if (file.empty())
         return;
@@ -603,18 +429,8 @@ void load_table_unlocked(const std::string& file) {
     }
 
     stats = loadStats;
-    for (const auto& [loadedKey, loadedEntries] : table)
-        for (const auto& entry : loadedEntries)
-            record_entry_distributions(entry);
     enforce_limit();
     stats.totalPositions = table.size();
-    if (settings.auditEnabled)
-    {
-        const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-          std::chrono::steady_clock::now() - loadStart);
-        ++auditMetrics.loadCount;
-        auditMetrics.loadMicros += static_cast<std::uint64_t>(elapsed.count());
-    }
     lastStatus           = format_status_unlocked();
 }
 
@@ -680,17 +496,7 @@ std::optional<std::string> update_settings(const OptionsMap& options) {
     else
         newSettings.bookMaxMoves = 16;
 
-    if (options.count("Experience Book Min Visits"))
-        newSettings.bookMinVisits = std::max(1, int(options["Experience Book Min Visits"]));
-    else
-        newSettings.bookMinVisits = 1;
-
     newSettings.minScore = Value(newSettings.bookEvalImportance * 4);
-
-    if (options.count("Experience Audit Enabled"))
-        newSettings.auditEnabled = bool(int(options["Experience Audit Enabled"]));
-    else
-        newSettings.auditEnabled = false;
 
     std::scoped_lock lock(mutex);
 
@@ -713,14 +519,9 @@ std::optional<std::string> update_settings(const OptionsMap& options) {
         pendingFlush = 0;
         stats        = {};
         lastStatus   = format_status_unlocked();
-        reset_audit_metrics_unlocked();
-        reset_since_newgame_counters_unlocked();
         settingsInitialized = true;
         return lastStatus;
     }
-
-    if (!settings.auditEnabled)
-        reset_audit_metrics_unlocked();
 
     const bool shouldLoad = !settingsInitialized || fileChanged
                              || (!wasEnabled && settings.enabled);
@@ -749,23 +550,12 @@ void on_new_position(const Position& pos, std::vector<Search::RootMove>& rootMov
     if (maxPliesFromBook != 0 && pos.game_ply() >= maxPliesFromBook)
         return;
 
-    if (settings.auditEnabled)
-    {
-        ++auditMetrics.lifetime.probes;
-        ++auditMetrics.sinceNewGame.probes;
-    }
-
     const auto key = compute_key(pos);
     auto       it  = table.find(key);
     if (it == table.end())
         return;
 
     touch_lru(key);
-    if (settings.auditEnabled)
-    {
-        ++auditMetrics.lifetime.hits;
-        ++auditMetrics.sinceNewGame.hits;
-    }
 
     const auto& entries = it->second;
 
@@ -780,16 +570,6 @@ void on_new_position(const Position& pos, std::vector<Search::RootMove>& rootMov
         if (entry.depth < settings.bookMinDepth)
             continue;
 
-        if (entry.visits < settings.bookMinVisits)
-        {
-            if (settings.auditEnabled)
-            {
-                ++auditMetrics.lifetime.minVisitsRejected;
-                ++auditMetrics.sinceNewGame.minVisitsRejected;
-            }
-            continue;
-        }
-
         if (std::abs(entry.score) < settings.minScore)
             continue;
 
@@ -798,12 +578,6 @@ void on_new_position(const Position& pos, std::vector<Search::RootMove>& rootMov
 
     if (candidates.empty())
         return;
-
-    if (settings.auditEnabled)
-    {
-        ++auditMetrics.lifetime.filteredHits;
-        ++auditMetrics.sinceNewGame.filteredHits;
-    }
 
     const auto quality = [&](const Entry* entry) {
         const int evalImportance   = settings.bookEvalImportance;
@@ -830,14 +604,7 @@ void on_new_position(const Position& pos, std::vector<Search::RootMove>& rootMov
         return;
 
     if (bestIt != rootMoves.begin())
-    {
         std::rotate(rootMoves.begin(), bestIt, std::next(bestIt));
-        if (settings.auditEnabled)
-        {
-            ++auditMetrics.lifetime.rootReorders;
-            ++auditMetrics.sinceNewGame.rootReorders;
-        }
-    }
 
     auto apply_entry = [](const Entry& entry, Search::RootMove& rm) {
         rm.score            = std::max(rm.score, entry.score);
@@ -909,7 +676,6 @@ void on_search_complete(const Position& pos,
 
         entries.push_back(entry);
         ++stats.uniqueMoves;
-        record_entry_distributions(entry);
     }
 
     if (wasEmpty && !entries.empty())
@@ -918,16 +684,6 @@ void on_search_complete(const Position& pos,
     touch_lru(key);
     enforce_limit();
     stats.totalPositions = table.size();
-
-    if (settings.auditEnabled)
-    {
-        ++auditMetrics.sessionEntriesWritten;
-        ++auditMetrics.currentGameEntriesWritten;
-        ++auditMetrics.lifetime.entriesWritten;
-        ++auditMetrics.sinceNewGame.entriesWritten;
-        if (existing)
-            record_entry_distributions(*existing);
-    }
 
     dirty = true;
     if (++pendingFlush >= FlushInterval)
@@ -938,7 +694,6 @@ void on_search_complete(const Position& pos,
 
 void new_game() {
     std::scoped_lock lock(mutex);
-    finalize_game_metrics_unlocked();
     flush_unlocked();
 }
 
@@ -954,11 +709,6 @@ std::string status_summary() {
         lastStatus = format_status_unlocked();
 
     return lastStatus;
-}
-
-std::string audit_summary() {
-    std::scoped_lock lock(mutex);
-    return format_audit_summary_unlocked();
 }
 
 }  // namespace Stockfish::Experience
