@@ -1,10 +1,26 @@
+ codex/rebrand-to-deepalienist-3.90-3190326-xii843
 # Deepalienist-3.90-310326
+=======
+ codex/rebrand-to-deepalienist-3.90-3190326-367shs
+# Deepalienist-3.90-310326
+=======
+# Deepalienist-3.90-3190326
+ main
+ main
 
 <p align="center">
   <img src="assets/revolution-logo.svg" alt="Deepalienist UCI chess engine logo featuring a minimalist French tricolor cockade" width="360" />
 </p>
 
+ codex/rebrand-to-deepalienist-3.90-3190326-xii843
 Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-3.90-310326** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
+=======
+ codex/rebrand-to-deepalienist-3.90-3190326-367shs
+Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-3.90-310326** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
+=======
+Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-3.90-3190326** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
+ main
+ main
 
 ## Overview
 
@@ -197,7 +213,15 @@ make -j build ARCH=x86-64-bmi2 COMP=gcc SSE41_POPCNT_PREFETCH=yes LTO=yes build
 
 El fichero de referencia `src/bench_prefetch_on.txt` documenta los incrementos de nodos/segundo obtenidos en posiciones tácticas con el prefetch activado.
 
+ codex/rebrand-to-deepalienist-3.90-3190326-xii843
 Tras compilar, valida la mejora con el benchmark integrado ejecutando `./Deepalienist-3.90-310326-sse41popcnt bench` desde `src/` o el binario que corresponda a la arquitectura elegida. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
+=======
+ codex/rebrand-to-deepalienist-3.90-3190326-367shs
+Tras compilar, valida la mejora con el benchmark integrado ejecutando `./Deepalienist-3.90-310326-sse41popcnt bench` desde `src/` o el binario que corresponda a la arquitectura elegida. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
+=======
+Tras compilar, valida la mejora con el benchmark integrado ejecutando `./Deepalienist-3.90-3190326-sse41popcnt bench` desde `src/` o el binario que corresponda a la arquitectura elegida. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
+main
+ main
 
 ### Building for AMD Hawk Point CPUs with FMA3
 
@@ -216,6 +240,10 @@ El objetivo `ARCH=x86-64-FMA3` habilita las instrucciones FMA3 necesarias para a
 
 ## Branding and executable names
 
+ codex/rebrand-to-deepalienist-3.90-3190326-xii843
+=======
+ codex/rebrand-to-deepalienist-3.90-3190326-367shs
+ main
 Every compiled binary now follows the `Deepalienist-3.90-310326-<arch>` naming scheme so the executable name clearly identifies the instruction-set target used at compile time. Typical examples include:
 
 - `Deepalienist-3.90-310326-sse41popcnt.exe`
@@ -225,6 +253,20 @@ Every compiled binary now follows the `Deepalienist-3.90-310326-<arch>` naming s
 - `Deepalienist-3.90-310326-FMA3.exe`
 
 The same architecture suffix is also reported through the engine UCI identification string, so GUIs show names such as `Deepalienist-3.90-310326-sse41popcnt`, `Deepalienist-3.90-310326-avx2`, `Deepalienist-3.90-310326-bmi2`, `Deepalienist-3.90-310326-FMA3`, or `Deepalienist-3.90-310326-avx512`.
+ codex/rebrand-to-deepalienist-3.90-3190326-xii843
+=======
+=======
+Every compiled binary now follows the `Deepalienist-3.90-3190326-<arch>` naming scheme so the executable name clearly identifies the instruction-set target used at compile time. Typical examples include:
+
+- `Deepalienist-3.90-3190326-sse41popcnt.exe`
+- `Deepalienist-3.90-3190326-avx2.exe`
+- `Deepalienist-3.90-3190326-avx512.exe`
+- `Deepalienist-3.90-3190326-bmi2.exe`
+- `Deepalienist-3.90-3190326-FMA3.exe`
+
+The same architecture suffix is also reported through the engine UCI identification string, so GUIs show names such as `Deepalienist-3.90-3190326-sse41popcnt`, `Deepalienist-3.90-3190326-avx2`, `Deepalienist-3.90-3190326-bmi2`, `Deepalienist-3.90-3190326-FMA3`, or `Deepalienist-3.90-3190326-avx512`.
+ main
+ main
 
 ## Contributing
 
