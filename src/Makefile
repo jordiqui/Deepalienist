@@ -44,7 +44,7 @@ else
 	EXESUF =
 endif
 BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
-EXE = Deepalienist-3.80-190326-$(BUILD_ARCH_TAG)$(EXESUF)
+EXE = Deepalienist-3.90-310326-$(BUILD_ARCH_TAG)$(EXESUF)
 
 NNUE_BIG = nn-9a0cc2a62c52.nnue
 NNUE_SMALL = nn-47fc8b7fff06.nnue
@@ -134,6 +134,12 @@ ifeq ($(ARCH), native)
    override ARCH := $(shell $(SHELL) ../scripts/get_native_properties.sh | cut -d " " -f 1)
 endif
 
+# Preserve user-selected architecture spelling for branding tags
+ifndef ARCH_BRAND
+ARCH_BRAND := $(ARCH)
+endif
+export ARCH_BRAND
+
 # Compatibility aliases with common Stockfish ARCH names
 ifeq ($(ARCH),x86-64-v2)
    override ARCH := x86-64-sse41-popcnt
@@ -157,8 +163,12 @@ endif
 # Build-time tag used for UCI id name and binary naming
 ifeq ($(ARCH),x86-64-sse41-popcnt)
 	BUILD_ARCH_TAG = sse41popcnt
-else ifeq ($(ARCH),x86-64-bmi2)
+else ifeq ($(ARCH_BRAND),x86-64-FMA3)
+	BUILD_ARCH_TAG = FMA3
+else ifeq ($(ARCH_BRAND),x86-64-fma3)
 	BUILD_ARCH_TAG = fma3
+else ifeq ($(ARCH),x86-64-bmi2)
+	BUILD_ARCH_TAG = bmi2
 endif
 
 # explicitly check for the list of supported architectures (as listed with make help),
