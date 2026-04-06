@@ -44,17 +44,9 @@ else
 	EXESUF =
 endif
 BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
- codex/rebrand-to-deepalienist-3.90-3190326-xii843
 EXE = Deepalienist-3.90-310326-$(BUILD_ARCH_TAG)$(EXESUF)
-=======
-codex/rebrand-to-deepalienist-3.90-3190326-367shs
-EXE = Deepalienist-3.90-310326-$(BUILD_ARCH_TAG)$(EXESUF)
-=======
-EXE = Deepalienist-3.90-3190326-$(BUILD_ARCH_TAG)$(EXESUF)
- main
- main
 
-NNUE_BIG = nn-9a0cc2a62c52.nnue
+NNUE_BIG = nn-7bf13f9655c8.nnue
 NNUE_SMALL = nn-47fc8b7fff06.nnue
 
 ### Installation dir definitions
@@ -143,20 +135,10 @@ ifeq ($(ARCH), native)
 endif
 
 # Preserve user-selected architecture spelling for branding tags
-codex/rebrand-to-deepalienist-3.90-3190326-xii843
-=======
- codex/rebrand-to-deepalienist-3.90-3190326-367shs
-main
 ifndef ARCH_BRAND
 ARCH_BRAND := $(ARCH)
 endif
 export ARCH_BRAND
-codex/rebrand-to-deepalienist-3.90-3190326-xii843
-=======
-=======
-ARCH_BRAND := $(ARCH)
-main
- main
 
 # Compatibility aliases with common Stockfish ARCH names
 ifeq ($(ARCH),x86-64-v2)
