@@ -120,7 +120,18 @@ std::string engine_version_info() {
     constexpr auto buildArchTag = "unknown";
 #endif
 
-    return std::string("Deepalienist-3.90-310326-") + buildArchTag;
+    std::string normalizedBuildArchTag = buildArchTag;
+
+    if (normalizedBuildArchTag == "AVX2")
+        normalizedBuildArchTag = "avx2";
+    else if (normalizedBuildArchTag == "BMI2")
+        normalizedBuildArchTag = "bmi2";
+    else if (normalizedBuildArchTag == "FMA3")
+        normalizedBuildArchTag = "fma3";
+    else if (normalizedBuildArchTag == "AVX512")
+        normalizedBuildArchTag = "avx512";
+
+    return std::string("Deepalienist-4.0-060426-") + normalizedBuildArchTag;
 #endif
 }
 
