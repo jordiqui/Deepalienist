@@ -44,7 +44,7 @@ else
 	EXESUF =
 endif
 BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
-EXE = Deepalienist-3.90-310326-$(BUILD_ARCH_TAG)$(EXESUF)
+EXE = Deepalienist-4.0-060426-$(BUILD_ARCH_TAG)$(EXESUF)
 
 NNUE_BIG = nn-7bf13f9655c8.nnue
 NNUE_SMALL = nn-47fc8b7fff06.nnue
@@ -153,6 +153,15 @@ endif
 ifeq ($(ARCH),x86-64-vnni256)
    override ARCH := x86-64-avxvnni
 endif
+ifeq ($(ARCH),x86-64-AVX2)
+   override ARCH := x86-64-avx2
+endif
+ifeq ($(ARCH),x86-64-BMI2)
+   override ARCH := x86-64-bmi2
+endif
+ifeq ($(ARCH),x86-64-AVX512)
+   override ARCH := x86-64-avx512
+endif
 ifeq ($(ARCH),x86-64-fma3)
    override ARCH := x86-64-bmi2
 endif
@@ -163,8 +172,12 @@ endif
 # Build-time tag used for UCI id name and binary naming
 ifeq ($(ARCH),x86-64-sse41-popcnt)
 	BUILD_ARCH_TAG = sse41popcnt
+else ifeq ($(ARCH),x86-64-avx2)
+	BUILD_ARCH_TAG = avx2
+else ifeq ($(ARCH),x86-64-avx512)
+	BUILD_ARCH_TAG = avx512
 else ifeq ($(ARCH_BRAND),x86-64-FMA3)
-	BUILD_ARCH_TAG = FMA3
+	BUILD_ARCH_TAG = fma3
 else ifeq ($(ARCH_BRAND),x86-64-fma3)
 	BUILD_ARCH_TAG = fma3
 else ifeq ($(ARCH),x86-64-bmi2)
