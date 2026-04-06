@@ -1127,8 +1127,25 @@ void Position::update_piece_threats(Piece                     pc,
     Bitboard threatened = attacks_bb(pc, s, occupied) & occupied;
     Bitboard sliders    = (rookQueens & rAttacks) | (bishopQueens & bAttacks);
     Bitboard incoming_threats =
-      (PseudoAttacks[KNIGHT][s] & knights) | (attacks_bb<PAWN>(s, WHITE) & blackPawns)
-      | (attacks_bb<PAWN>(s, BLACK) & whitePawns) | (PseudoAttacks[KING][s] & kings);
+      (PseudoAttacks[KNIGHT][s] & knights) | (PseudoAttacks[KING][s] & kings);
+
+    // Compute both incoming and outgoing pawn threats. Incoming pawn pushers are only
+    // added if 'pc' is a pawn.
+    if (type_of(pc) == PAWN)
+    {
+        Bitboard whiteAttacks = PawnPushOrAttacks[WHITE][s];
+        Bitboard blackAttacks = PawnPushOrAttacks[BLACK][s];
+
+        threatened |= (color_of(pc) == WHITE ? whiteAttacks : blackAttacks) & pieces(PAWN);
+
+        incoming_threats |= whiteAttacks & blackPawns;
+        incoming_threats |= blackAttacks & whitePawns;
+    }
+    else
+    {
+        incoming_threats |=
+          (attacks_bb<PAWN>(s, WHITE) & blackPawns) | (attacks_bb<PAWN>(s, BLACK) & whitePawns);
+    }
 
 #ifdef USE_AVX512ICL
     if (threatened)
