@@ -131,7 +131,7 @@ std::string engine_version_info() {
     else if (normalizedBuildArchTag == "AVX512")
         normalizedBuildArchTag = "avx512";
 
-    return std::string("Deepalienist-4.0-060426-") + normalizedBuildArchTag;
+    return std::string("Deepalienist-4.10-090426-") + normalizedBuildArchTag;
 #endif
 }
 
