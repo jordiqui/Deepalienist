@@ -44,7 +44,7 @@ else
 	EXESUF =
 endif
 BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
-EXE = Deepalienist-4.0-060426-$(BUILD_ARCH_TAG)$(EXESUF)
+EXE = Deepalienist-4.10-090426-$(BUILD_ARCH_TAG)$(EXESUF)
 
 NNUE_BIG = nn-7bf13f9655c8.nnue
 NNUE_SMALL = nn-47fc8b7fff06.nnue
