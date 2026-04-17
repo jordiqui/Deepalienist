@@ -1,26 +1,10 @@
- codex/rebrand-to-deepalienist-3.90-3190326-xii843
-# Deepalienist-3.90-310326
-=======
- codex/rebrand-to-deepalienist-3.90-3190326-367shs
-# Deepalienist-3.90-310326
-=======
-# Deepalienist-3.90-3190326
- main
- main
+# Deepalienist-4.10-170426
 
 <p align="center">
   <img src="assets/revolution-logo.svg" alt="Deepalienist UCI chess engine logo featuring a minimalist French tricolor cockade" width="360" />
 </p>
 
- codex/rebrand-to-deepalienist-3.90-3190326-xii843
-Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-3.90-310326** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
-=======
- codex/rebrand-to-deepalienist-3.90-3190326-367shs
-Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-3.90-310326** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
-=======
-Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-3.90-3190326** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
- main
- main
+Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-4.10-170426** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
 
 ## Overview
 
@@ -213,21 +197,11 @@ make -j build ARCH=x86-64-bmi2 COMP=gcc SSE41_POPCNT_PREFETCH=yes LTO=yes build
 
 El fichero de referencia `src/bench_prefetch_on.txt` documenta los incrementos de nodos/segundo obtenidos en posiciones tácticas con el prefetch activado.
 
- codex/rebrand-to-deepalienist-3.90-3190326-xii843
-Tras compilar, valida la mejora con el benchmark integrado ejecutando `./Deepalienist-3.90-310326-sse41popcnt bench` desde `src/` o el binario que corresponda a la arquitectura elegida. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
-=======
- codex/rebrand-to-deepalienist-3.90-3190326-367shs
-Tras compilar, valida la mejora con el benchmark integrado ejecutando `./Deepalienist-3.90-310326-sse41popcnt bench` desde `src/` o el binario que corresponda a la arquitectura elegida. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
-=======
-Tras compilar, valida la mejora con el benchmark integrado ejecutando `./Deepalienist-3.90-3190326-sse41popcnt bench` desde `src/` o el binario que corresponda a la arquitectura elegida. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
-main
- main
+Tras compilar, valida la mejora con el benchmark integrado ejecutando `./Deepalienist-4.10-170426-sse41popcnt bench` desde `src/` o el binario que corresponda a la arquitectura elegida. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
 
 ### Building for AMD Hawk Point CPUs with FMA3
 
 El comando `make ci-local` (desde `src`) compila los perfiles x86-64 principales con gcc y clang para detectar rápidamente roturas específicas de arquitectura antes de subir cambios.
-
-### Building for AMD Hawk Point CPUs with FMA3
 
 Las CPU AMD con nombre en clave **Hawk Point** admiten la instrucción FMA3, lo que permite compilar binarios optimizados para este motor. Para generar un binario compatible con estas CPU usando `clang++` y el enlazador `lld`, ejecuta desde el directorio `src`:
 
@@ -240,33 +214,15 @@ El objetivo `ARCH=x86-64-FMA3` habilita las instrucciones FMA3 necesarias para a
 
 ## Branding and executable names
 
- codex/rebrand-to-deepalienist-3.90-3190326-xii843
-=======
- codex/rebrand-to-deepalienist-3.90-3190326-367shs
- main
-Every compiled binary now follows the `Deepalienist-3.90-310326-<arch>` naming scheme so the executable name clearly identifies the instruction-set target used at compile time. Typical examples include:
+Every compiled binary now follows the `Deepalienist-4.10-170426-<arch>` naming scheme so the executable name clearly identifies the instruction-set target used at compile time. Typical examples include:
 
-- `Deepalienist-3.90-310326-sse41popcnt.exe`
-- `Deepalienist-3.90-310326-avx2.exe`
-- `Deepalienist-3.90-310326-avx512.exe`
-- `Deepalienist-3.90-310326-bmi2.exe`
-- `Deepalienist-3.90-310326-FMA3.exe`
+- `Deepalienist-4.10-170426-sse41popcnt.exe`
+- `Deepalienist-4.10-170426-avx2.exe`
+- `Deepalienist-4.10-170426-avx512.exe`
+- `Deepalienist-4.10-170426-bmi2.exe`
+- `Deepalienist-4.10-170426-FMA3.exe`
 
-The same architecture suffix is also reported through the engine UCI identification string, so GUIs show names such as `Deepalienist-3.90-310326-sse41popcnt`, `Deepalienist-3.90-310326-avx2`, `Deepalienist-3.90-310326-bmi2`, `Deepalienist-3.90-310326-FMA3`, or `Deepalienist-3.90-310326-avx512`.
- codex/rebrand-to-deepalienist-3.90-3190326-xii843
-=======
-=======
-Every compiled binary now follows the `Deepalienist-3.90-3190326-<arch>` naming scheme so the executable name clearly identifies the instruction-set target used at compile time. Typical examples include:
-
-- `Deepalienist-3.90-3190326-sse41popcnt.exe`
-- `Deepalienist-3.90-3190326-avx2.exe`
-- `Deepalienist-3.90-3190326-avx512.exe`
-- `Deepalienist-3.90-3190326-bmi2.exe`
-- `Deepalienist-3.90-3190326-FMA3.exe`
-
-The same architecture suffix is also reported through the engine UCI identification string, so GUIs show names such as `Deepalienist-3.90-3190326-sse41popcnt`, `Deepalienist-3.90-3190326-avx2`, `Deepalienist-3.90-3190326-bmi2`, `Deepalienist-3.90-3190326-FMA3`, or `Deepalienist-3.90-3190326-avx512`.
- main
- main
+The same architecture suffix is also reported through the engine UCI identification string, so GUIs show names such as `Deepalienist-4.10-170426-sse41popcnt`, `Deepalienist-4.10-170426-avx2`, `Deepalienist-4.10-170426-bmi2`, `Deepalienist-4.10-170426-FMA3`, or `Deepalienist-4.10-170426-avx512`.
 
 ## Contributing
 
