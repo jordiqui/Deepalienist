@@ -195,13 +195,13 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Book 2 Width", Option(1, 1, 100));
     options.add("(CTG) Book 2 Only Green", Option(false));
 
-    options.add("Experience Enabled", Option(true, [this](const Option&) {
+    options.add("Experience", Option(true, [this](const Option&) {
                     return Experience::update_settings(options);
                 }));
-    options.add("Experience File", Option("experience.exp", [this](const Option&) {
+    options.add("ExperienceFile", Option("experience.exp", [this](const Option&) {
                     return Experience::update_settings(options);
                 }));
-    options.add("Experience Readonly", Option(false, [this](const Option&) {
+    options.add("Read only learning", Option(false, [this](const Option&) {
                     return Experience::update_settings(options);
                 }));
     options.add("Experience Book", Option(false, [this](const Option&) {

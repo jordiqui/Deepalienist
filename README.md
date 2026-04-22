@@ -28,6 +28,8 @@ At load time Deepalienist automatically merges every file named according to the
 
 ### Learning-related UCI options
 
+- **Experience** (boolean, default `true`): master switch for loading, probing, and persisting experience data.
+- **ExperienceFile** (string, default `experience.exp`): path to the BrainLearn-compatible binary experience file.
 - **Read only learning** (boolean, default `false`): prevents the engine from updating the experience file.
 - **Self Q-learning** (boolean, default `false`): switches the learning algorithm to the BrainLearn Q-learning mode that is optimised for self-play scenarios.
 - **Experience Book** (boolean, default `false`): allows the engine to consult the experience file as an opening book. Moves are chosen by prioritising maximum win probability, then internal score, and finally search depth. The `showexp` UCI token can be used to list available moves in the current position.

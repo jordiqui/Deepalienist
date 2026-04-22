@@ -130,9 +130,9 @@ void UCIEngine::loop() {
             print_info_string(UciLogo);
             print_info_string(engine_info());
 
-            if (engine.get_options()["Experience Enabled"])
+            if (engine.get_options()["Experience"])
             {
-                const std::string experienceFile = std::string(engine.get_options()["Experience File"]);
+                const std::string experienceFile = std::string(engine.get_options()["ExperienceFile"]);
                 if (!experienceFile.empty() && !std::filesystem::exists(experienceFile))
                     print_info_string("Experience file not found: " + experienceFile);
 
