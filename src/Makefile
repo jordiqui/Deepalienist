@@ -46,7 +46,7 @@ endif
 BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
 EXE = Deepalienist-4.20-190426-$(BUILD_ARCH_TAG)$(EXESUF)
 
-NNUE_BIG = nn-7bf13f9655c8.nnue
+NNUE_BIG = nn-f68ec79f0fe3.nnue
 NNUE_SMALL = nn-47fc8b7fff06.nnue
 
 ### Installation dir definitions
