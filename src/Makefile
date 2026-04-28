@@ -44,7 +44,7 @@ else
 	EXESUF =
 endif
 BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
-EXE = Deepalienist-4.20-190426-$(BUILD_ARCH_TAG)$(EXESUF)
+EXE = Deepalienist-4.30-280426-$(BUILD_ARCH_TAG)$(EXESUF)
 
 NNUE_BIG = nn-f68ec79f0fe3.nnue
 NNUE_SMALL = nn-47fc8b7fff06.nnue
@@ -174,7 +174,7 @@ else ifeq ($(ARCH),x86-64-avx2)
 else ifeq ($(ARCH),x86-64-avx512)
 	BUILD_ARCH_TAG = avx512
 else ifeq ($(ARCH),x86-64-fma3)
-	BUILD_ARCH_TAG = fma3
+	BUILD_ARCH_TAG = FMA3
 else ifeq ($(ARCH),x86-64-bmi2)
 	BUILD_ARCH_TAG = bmi2
 endif

@@ -126,12 +126,12 @@ std::string engine_version_info() {
         normalizedBuildArchTag = "avx2";
     else if (normalizedBuildArchTag == "BMI2")
         normalizedBuildArchTag = "bmi2";
-    else if (normalizedBuildArchTag == "FMA3")
+    else if (normalizedBuildArchTag == "FMA3" || normalizedBuildArchTag == "fma3")
         normalizedBuildArchTag = "FMA3";
     else if (normalizedBuildArchTag == "AVX512")
         normalizedBuildArchTag = "avx512";
 
-    return std::string("Deepalienist-4.20-190426-") + normalizedBuildArchTag;
+    return std::string("Deepalienist-4.30-280426-") + normalizedBuildArchTag;
 #endif
 }
 
