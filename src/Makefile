@@ -162,11 +162,8 @@ endif
 ifeq ($(ARCH),x86-64-AVX512)
    override ARCH := x86-64-avx512
 endif
-ifeq ($(ARCH),x86-64-fma3)
-   override ARCH := x86-64-bmi2
-endif
 ifeq ($(ARCH),x86-64-FMA3)
-   override ARCH := x86-64-bmi2
+   override ARCH := x86-64-fma3
 endif
 
 # Build-time tag used for UCI id name and binary naming
@@ -176,10 +173,8 @@ else ifeq ($(ARCH),x86-64-avx2)
 	BUILD_ARCH_TAG = avx2
 else ifeq ($(ARCH),x86-64-avx512)
 	BUILD_ARCH_TAG = avx512
-else ifeq ($(ARCH_BRAND),x86-64-FMA3)
-	BUILD_ARCH_TAG = FMA3
-else ifeq ($(ARCH_BRAND),x86-64-fma3)
-	BUILD_ARCH_TAG = FMA3
+else ifeq ($(ARCH),x86-64-fma3)
+	BUILD_ARCH_TAG = fma3
 else ifeq ($(ARCH),x86-64-bmi2)
 	BUILD_ARCH_TAG = bmi2
 endif
@@ -188,7 +183,7 @@ endif
 # the user can override with `make ARCH=x86-64-avx512icl SUPPORTED_ARCH=true`
 ifeq ($(ARCH), $(filter $(ARCH), \
                  x86-64-avx512icl x86-64-vnni512 x86-64-avx512 x86-64-avxvnni \
-                 x86-64-bmi2 x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
+                 x86-64-bmi2 x86-64-fma3 x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
                  x86-64 x86-32-sse41-popcnt x86-32-sse2 x86-32 ppc-64 ppc-64-altivec ppc-64-vsx ppc-32 e2k \
                  armv7 armv7-neon armv8 armv8-dotprod apple-silicon general-64 general-32 riscv64 \
                  loongarch64 loongarch64-lsx loongarch64-lasx))
@@ -211,6 +206,7 @@ sse2 = no
 ssse3 = no
 sse41 = no
 avx2 = no
+fma3 = no
 avxvnni = no
 avx512 = no
 vnni512 = no
@@ -296,6 +292,16 @@ ifeq ($(findstring -avx2,$(ARCH)),-avx2)
 	avx2 = yes
 endif
 
+ifeq ($(findstring -fma3,$(ARCH)),-fma3)
+	popcnt = yes
+	sse = yes
+	sse2 = yes
+	ssse3 = yes
+	sse41 = yes
+	avx2 = yes
+	fma3 = yes
+endif
+
 ifeq ($(findstring -avxvnni,$(ARCH)),-avxvnni)
 	popcnt = yes
 	sse = yes
@@ -314,6 +320,7 @@ ifeq ($(findstring -bmi2,$(ARCH)),-bmi2)
 	ssse3 = yes
 	sse41 = yes
 	avx2 = yes
+	fma3 = yes
 	pext = yes
 endif
 
@@ -761,8 +768,13 @@ endif
 ifeq ($(avx2),yes)
 	CXXFLAGS += -DUSE_AVX2
 	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-		# Zen4: AVX2+BMI2+FMA3 bench target.
-		CXXFLAGS += -mavx2 -mbmi2 -mfma
+		CXXFLAGS += -mavx2
+	endif
+endif
+
+ifeq ($(fma3),yes)
+	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
+		CXXFLAGS += -mfma
 	endif
 endif
 
@@ -971,8 +983,8 @@ help:
 	echo "x86-64-v4               > alias of x86-64-avx512" && \
 	echo "x86-64-avxvnni          > x86 64-bit with vnni 256bit support" && \
 	echo "x86-64-bmi2             > x86 64-bit with bmi2 support" && \
-	echo "x86-64-fma3             > alias of x86-64-bmi2 (AVX2/BMI2/FMA3)" && \
-	echo "x86-64-FMA3             > alias of x86-64-bmi2 (AVX2/BMI2/FMA3)" && \
+	echo "x86-64-fma3             > x86 64-bit with avx2 and fma3 support" && \
+	echo "x86-64-FMA3             > alias of x86-64-fma3" && \
 	echo "x86-64-avx2             > x86 64-bit with avx2 support" && \
 	echo "x86-64-v3               > alias of x86-64-bmi2 (AVX2/BMI2/FMA3)" && \
 	echo "x86-64-sse41-popcnt     > x86 64-bit with sse41 and popcnt support" && \
@@ -1134,6 +1146,7 @@ config-sanity: net
 	echo "ssse3: '$(ssse3)'" && \
 	echo "sse41: '$(sse41)'" && \
 	echo "avx2: '$(avx2)'" && \
+	echo "fma3: '$(fma3)'" && \
 	echo "avxvnni: '$(avxvnni)'" && \
 	echo "avx512: '$(avx512)'" && \
 	echo "vnni512: '$(vnni512)'" && \
@@ -1170,9 +1183,10 @@ config-sanity: net
 	(test "$(mmx)" = "yes" || test "$(mmx)" = "no") && \
 	(test "$(sse2)" = "yes" || test "$(sse2)" = "no") && \
 	(test "$(ssse3)" = "yes" || test "$(ssse3)" = "no") && \
-	(test "$(sse41)" = "yes" || test "$(sse41)" = "no") && \
-	(test "$(avx2)" = "yes" || test "$(avx2)" = "no") && \
-	(test "$(avx512)" = "yes" || test "$(avx512)" = "no") && \
+		(test "$(sse41)" = "yes" || test "$(sse41)" = "no") && \
+		(test "$(avx2)" = "yes" || test "$(avx2)" = "no") && \
+		(test "$(fma3)" = "yes" || test "$(fma3)" = "no") && \
+		(test "$(avx512)" = "yes" || test "$(avx512)" = "no") && \
 	(test "$(vnni512)" = "yes" || test "$(vnni512)" = "no") && \
 	(test "$(avx512icl)" = "yes" || test "$(avx512icl)" = "no") && \
 	(test "$(altivec)" = "yes" || test "$(altivec)" = "no") && \

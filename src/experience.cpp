@@ -540,7 +540,7 @@ std::optional<std::string> update_settings(const OptionsMap& options) {
     else if (options.count("Experience Enabled"))
         newSettings.enabled = bool(int(options["Experience Enabled"]));
     else
-        newSettings.enabled = true;
+        newSettings.enabled = false;
 
     if (options.count("ExperienceFile"))
         newSettings.file = std::string(options["ExperienceFile"]);
