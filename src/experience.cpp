@@ -20,8 +20,11 @@
 #include <utility>
 #include <vector>
 #include <system_error>
+#include <cstdlib>
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 
 #include "experience_compat.h"
@@ -54,7 +57,6 @@ struct Settings {
     int         bookMaxMoves       = 16;
     std::string file               = "experience.exp";
     std::size_t maxEntries         = 200000;
-    Value       minScore           = Value(20);
 };
 
 struct Stats {
@@ -85,6 +87,42 @@ struct PersistedLearningMove {
 
 static_assert(sizeof(PersistedLearningMove) == 24, "unexpected persisted format size");
 constexpr std::uint16_t ExpTag = 0x746C;
+
+
+std::string resolve_experience_path(const std::string& configuredFile) {
+    namespace fs = std::filesystem;
+
+    if (configuredFile.empty())
+        return configuredFile;
+
+    fs::path configured(configuredFile);
+    if (configured.is_absolute())
+        return configured.lexically_normal().string();
+
+#ifdef _WIN32
+    std::wstring buffer(MAX_PATH, L'\0');
+    const DWORD len = GetModuleFileNameW(nullptr, buffer.data(), DWORD(buffer.size()));
+    if (len > 0 && len < buffer.size())
+    {
+        buffer.resize(len);
+        fs::path exePath(buffer);
+        return (exePath.parent_path() / configured).lexically_normal().string();
+    }
+#else
+    std::vector<char> buffer(4096, '\0');
+    const ssize_t len = readlink("/proc/self/exe", buffer.data(), buffer.size() - 1);
+    if (len > 0)
+    {
+        buffer[size_t(len)] = '\0';
+        fs::path exePath(buffer.data());
+        return (exePath.parent_path() / configured).lexically_normal().string();
+    }
+#endif
+
+    std::error_code ec;
+    const fs::path absolutePath = fs::absolute(configured, ec);
+    return ec ? configured.lexically_normal().string() : absolutePath.lexically_normal().string();
+}
 
 void touch_lru(std::uint64_t key) {
     auto it = lruIndex.find(key);
@@ -273,8 +311,11 @@ bool load_brainlearn_binary(std::istream& in, Stats& loadStats) {
     const auto fileSize = in.tellg();
     in.seekg(startPos, std::ios::beg);
 
-    if (fileSize <= 0 || (fileSize % std::streamoff(sizeof(PersistedLearningMove))) != 0)
+    if (fileSize < 0 || (fileSize % std::streamoff(sizeof(PersistedLearningMove))) != 0)
         return false;
+
+    if (fileSize == 0)
+        return true;
 
     bool parsedAny = false;
 
@@ -455,6 +496,12 @@ void load_table_unlocked(const std::string& file) {
     if (file.empty())
         return;
 
+    if (!std::filesystem::exists(file))
+    {
+        lastStatus = format_status_unlocked();
+        return;
+    }
+
     std::ifstream in(file, std::ios::binary);
     if (!in)
         return;
@@ -505,8 +552,8 @@ void load_table_unlocked(const std::string& file) {
         table.clear();
         lru.clear();
         lruIndex.clear();
-        stats     = {};
-        lastStatus = format_status_unlocked();
+        stats      = {};
+        lastStatus = "Experience file import failed: " + file;
         return;
     }
 
@@ -517,17 +564,22 @@ void load_table_unlocked(const std::string& file) {
 }
 
 void flush_unlocked() {
-    if (!dirty)
-        return;
-
-    if (settings.readonly)
+    if (!settings.enabled || settings.readonly || settings.file.empty())
     {
-        dirty        = false;
+        if (settings.readonly)
+            dirty = false;
+        return;
+    }
+
+    if (!dirty)
+    {
+        if (!std::filesystem::exists(settings.file))
+            save_table_unlocked(settings.file);
         return;
     }
 
     save_table_unlocked(settings.file);
-    dirty        = false;
+    dirty = false;
 }
 
 }  // namespace
@@ -542,12 +594,15 @@ std::optional<std::string> update_settings(const OptionsMap& options) {
     else
         newSettings.enabled = false;
 
+    std::string configuredFile = newSettings.file;
     if (options.count("ExperienceFile"))
-        newSettings.file = std::string(options["ExperienceFile"]);
+        configuredFile = std::string(options["ExperienceFile"]);
     else if (options.count("Experience File"))
-        newSettings.file = std::string(options["Experience File"]);
-    else if (newSettings.file.empty())
-        newSettings.file = "experience.exp";
+        configuredFile = std::string(options["Experience File"]);
+    else if (configuredFile.empty())
+        configuredFile = "experience.exp";
+
+    newSettings.file = resolve_experience_path(configuredFile);
 
     if (options.count("Read only learning"))
         newSettings.readonly = bool(int(options["Read only learning"]));
@@ -582,7 +637,6 @@ std::optional<std::string> update_settings(const OptionsMap& options) {
     else
         newSettings.bookMaxMoves = 16;
 
-    newSettings.minScore = Value(newSettings.bookEvalImportance * 4);
 
     std::scoped_lock lock(mutex);
 
@@ -655,8 +709,6 @@ void on_new_position(const Position& pos, std::vector<Search::RootMove>& rootMov
         if (entry.depth < settings.bookMinDepth)
             continue;
 
-        if (std::abs(entry.score) < settings.minScore)
-            continue;
 
         candidates.push_back(&entry);
     }
@@ -782,6 +834,11 @@ void new_game() {
 void flush() {
     std::scoped_lock lock(mutex);
     flush_unlocked();
+}
+
+std::string resolved_file_path() {
+    std::scoped_lock lock(mutex);
+    return settings.file;
 }
 
 std::string status_summary() {

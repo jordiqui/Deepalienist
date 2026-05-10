@@ -132,7 +132,7 @@ void UCIEngine::loop() {
 
             if (engine.get_options()["Experience"])
             {
-                const std::string experienceFile = std::string(engine.get_options()["ExperienceFile"]);
+                const std::string experienceFile = Experience::resolved_file_path();
                 if (!experienceFile.empty() && !std::filesystem::exists(experienceFile))
                     print_info_string("Experience file not found: " + experienceFile);
 
