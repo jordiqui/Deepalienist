@@ -49,6 +49,9 @@ void new_game();
 // Flush any pending changes to disk.
 void flush();
 
+// Returns the resolved (absolute or executable-relative) experience file path.
+std::string resolved_file_path();
+
 // Returns a human readable status string describing the currently loaded
 // experience file and its statistics. The string is suitable for printing as a
 // UCI "info string" message.

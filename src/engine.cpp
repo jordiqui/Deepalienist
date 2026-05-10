@@ -204,7 +204,7 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Read only learning", Option(false, [this](const Option&) {
                     return Experience::update_settings(options);
                 }));
-    options.add("Experience Book", Option(false, [this](const Option&) {
+    options.add("Experience Book", Option(true, [this](const Option&) {
                     return Experience::update_settings(options);
                 }));
     options.add("Experience Book Width", Option(1, 1, 20, [this](const Option&) {
@@ -216,7 +216,7 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("Experience Book Min Depth", Option(4, 4, 64, [this](const Option&) {
                     return Experience::update_settings(options);
                 }));
-    options.add("Experience Book Max Moves", Option(16, 1, 100, [this](const Option&) {
+    options.add("Experience Book Max Moves", Option(100, 1, 100, [this](const Option&) {
                     return Experience::update_settings(options);
                 }));
 
