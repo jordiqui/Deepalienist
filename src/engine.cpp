@@ -60,51 +60,6 @@ int            MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
 constexpr NumaAutoPolicy DefaultNumaPolicy = BundledL3Policy{32};
 
 namespace {
-
-bool try_emit_tablebase_bestmove(const OptionsMap&             options,
-                                 Position&                     pos,
-                                 const Search::LimitsType&     limits,
-                                 Search::SearchManager::UpdateContext& updates) {
-    if (limits.perft || limits.infinite || limits.ponderMode || pos.can_castle(ANY_CASTLING)
-        || popcount(pos.pieces()) > Tablebases::MaxCardinality)
-        return false;
-
-    Search::RootMoves rootMoves;
-    const auto        legalMoves = MoveList<LEGAL>(pos);
-
-    for (const auto& uciMove : limits.searchmoves)
-    {
-        auto move = UCIEngine::to_move(pos, uciMove);
-
-        if (std::find(legalMoves.begin(), legalMoves.end(), move) != legalMoves.end())
-            rootMoves.emplace_back(move);
-    }
-
-    if (rootMoves.empty())
-        for (const auto& move : legalMoves)
-            rootMoves.emplace_back(move);
-
-    const int probeLimit = int(options["SyzygyProbeLimit"]);
-
-    if (probeLimit == 0 || popcount(pos.pieces()) > probeLimit)
-        return false;
-
-    const bool rankDTZ = rootMoves.size() == 1 || options["MultiPV"] == 1;
-
-    if (!Tablebases::root_probe(pos, rootMoves, options["Syzygy50MoveRule"], rankDTZ))
-        return false;
-
-    const auto& bestRootMove = rootMoves.front();
-    const auto  bestmove     = UCIEngine::move(bestRootMove.pv[0], pos.is_chess960());
-
-    std::string ponder;
-    if (bestRootMove.pv.size() > 1)
-        ponder = UCIEngine::move(bestRootMove.pv[1], pos.is_chess960());
-
-    updates.onBestmove(bestmove, ponder);
-    return true;
-}
-
 }  // namespace
 
 Engine::Engine(std::optional<std::string> path) :
@@ -246,9 +201,6 @@ std::uint64_t Engine::perft(const std::string& fen, Depth depth, bool isChess960
 
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
-
-    if (try_emit_tablebase_bestmove(options, pos, limits, updateContext))
-        return;
 
     verify_networks();
 
