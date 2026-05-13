@@ -74,12 +74,12 @@ int main() {
     OptionsMap options;
     options.add(Stockfish::Book::format_option_key("CTG/BIN Book %d File", 1), Option("binbook.bin"));
     options.add(Stockfish::Book::format_option_key("Book %d Width", 1), Option(1, 1, 100));
-    options.add(Stockfish::Book::format_option_key("Book %d Depth", 1), Option(255, 1, 255));
+    options.add(Stockfish::Book::format_option_key("Book %d Depth", 1), Option(255, 0, 255));
     options.add(Stockfish::Book::format_option_key("(CTG) Book %d Only Green", 1), Option(false));
 
     options.add(Stockfish::Book::format_option_key("CTG/BIN Book %d File", 2), Option("ctgbook.ctg"));
     options.add(Stockfish::Book::format_option_key("Book %d Width", 2), Option(1, 1, 100));
-    options.add(Stockfish::Book::format_option_key("Book %d Depth", 2), Option(255, 1, 255));
+    options.add(Stockfish::Book::format_option_key("Book %d Depth", 2), Option(255, 0, 255));
     options.add(Stockfish::Book::format_option_key("(CTG) Book %d Only Green", 2), Option(false));
 
     BookManager manager;
@@ -103,6 +103,30 @@ int main() {
 
     manager.set_book_for_testing(1, nullptr);
     result = manager.probe(pos, options);
+    assert(result == Move::none());
+
+    manager.set_book_for_testing(0, new StubBook("BIN", binMove));
+    manager.set_book_for_testing(1, new StubBook("CTG", ctgMove));
+
+    StateInfo nextState;
+    pos.do_move(Move(SQ_E2, SQ_E4), nextState);
+
+    OptionsMap depth255Options;
+    depth255Options.add(Stockfish::Book::format_option_key("Book %d Depth", 1), Option(255, 0, 255));
+    depth255Options.add(Stockfish::Book::format_option_key("Book %d Depth", 2), Option(255, 0, 255));
+    result = manager.probe(pos, depth255Options);
+    assert(result == binMove);
+
+    OptionsMap slot1OutOfDepthOptions;
+    slot1OutOfDepthOptions.add(Stockfish::Book::format_option_key("Book %d Depth", 1), Option(0, 0, 255));
+    slot1OutOfDepthOptions.add(Stockfish::Book::format_option_key("Book %d Depth", 2), Option(255, 0, 255));
+    result = manager.probe(pos, slot1OutOfDepthOptions);
+    assert(result == ctgMove);
+
+    OptionsMap allOutOfDepthOptions;
+    allOutOfDepthOptions.add(Stockfish::Book::format_option_key("Book %d Depth", 1), Option(0, 0, 255));
+    allOutOfDepthOptions.add(Stockfish::Book::format_option_key("Book %d Depth", 2), Option(0, 0, 255));
+    result = manager.probe(pos, allOutOfDepthOptions);
     assert(result == Move::none());
 
     // If books fail to load and are later disabled, the live book fallback

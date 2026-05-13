@@ -57,8 +57,16 @@ Move BookManager::probe(const Position& pos, const OptionsMap& options) const {
         if (!books_[index])
             continue;
 
+        const auto depthKey = Book::format_option_key("Book %d Depth", int(index + 1));
         const auto widthKey = Book::format_option_key("Book %d Width", int(index + 1));
         const auto onlyGreenKey = Book::format_option_key("(CTG) Book %d Only Green", int(index + 1));
+
+        int depth = 255;
+        if (options.count(depthKey))
+            depth = std::clamp(int(options[depthKey]), 0, 255);
+
+        if (pos.game_ply() > depth)
+            continue;
 
         std::size_t width = 1;
         if (options.count(widthKey))
