@@ -685,8 +685,7 @@ void on_new_position(const Position& pos, std::vector<Search::RootMove>& rootMov
     if (!settings.enabled || !settings.bookEnabled || rootMoves.empty())
         return;
 
-    const int maxPliesFromBook = settings.bookMaxMoves > 0 ? settings.bookMaxMoves * 2 : 0;
-    if (maxPliesFromBook != 0 && pos.game_ply() >= maxPliesFromBook)
+    if (settings.bookMaxMoves > 0 && pos.game_ply() > settings.bookMaxMoves)
         return;
 
     const auto key = std::uint64_t(pos.key());

@@ -60,6 +60,20 @@ int            MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
 constexpr NumaAutoPolicy DefaultNumaPolicy = BundledL3Policy{32};
 
 namespace {
+bool root_may_be_in_tablebase(const Position& pos, const OptionsMap& options) {
+    if (!options.count("SyzygyProbeLimit"))
+        return false;
+
+    int cardinality = int(options["SyzygyProbeLimit"]);
+
+    if (cardinality <= 0)
+        return false;
+
+    if (cardinality > Tablebases::MaxCardinality)
+        cardinality = Tablebases::MaxCardinality;
+
+    return cardinality >= popcount(pos.pieces()) && !pos.can_castle(ANY_CASTLING);
+}
 }  // namespace
 
 Engine::Engine(std::optional<std::string> path) :
@@ -142,11 +156,11 @@ Engine::Engine(std::optional<std::string> path) :
     options.add("SyzygyProbeLimit", Option(7, 0, 7));
 
     options.add("CTG/BIN Book 1 File", Option(""));
-    options.add("Book 1 Depth", Option(0, 0, 255));
+    options.add("Book 1 Depth", Option(255, 0, 255));
     options.add("Book 1 Width", Option(1, 1, 100));
     options.add("(CTG) Book 1 Only Green", Option(false));
     options.add("CTG/BIN Book 2 File", Option(""));
-    options.add("Book 2 Depth", Option(0, 0, 255));
+    options.add("Book 2 Depth", Option(255, 0, 255));
     options.add("Book 2 Width", Option(1, 1, 100));
     options.add("(CTG) Book 2 Only Green", Option(false));
 
@@ -204,7 +218,7 @@ void Engine::go(Search::LimitsType& limits) {
 
     verify_networks();
 
-    if (limits.perft == 0)
+    if (limits.perft == 0 && !root_may_be_in_tablebase(pos, options))
     {
         const Move bookMove = bookManager.probe(pos, options);
         if (bookMove != Move::none())
