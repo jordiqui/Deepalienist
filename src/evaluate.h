@@ -43,7 +43,7 @@ struct AccumulatorCaches;
 class AccumulatorStack;
 }
 
-std::string trace(Position& pos, const Eval::NNUE::Networks& networks);
+std::string trace(Position& pos, const NNUE::NetworkBig& network);
 
 Value evaluate(const NNUE::NetworkBig&        network,
                const Position&                pos,

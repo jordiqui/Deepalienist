@@ -386,7 +386,7 @@ void Engine::trace_eval() const {
 
     verify_networks();
 
-    sync_cout << "\n" << Eval::trace(p, *networks) << sync_endl;
+    sync_cout << "\n" << Eval::trace(p, (*networks).big) << sync_endl;
 }
 
 const OptionsMap& Engine::get_options() const { return options; }
