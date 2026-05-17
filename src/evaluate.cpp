@@ -75,26 +75,29 @@ Value Eval::evaluate(const Eval::NNUE::NetworkBig&   network,
 // a string (suitable for outputting to stdout) that contains the detailed
 // descriptions and values of each evaluation term. Useful for debugging.
 // Trace scores are from white's point of view
-std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
+std::string Eval::trace(Position& pos, const Eval::NNUE::NetworkBig& network) {
 
     if (pos.checkers())
         return "Final evaluation: none (in check)";
 
     auto accumulators = std::make_unique<Eval::NNUE::AccumulatorStack>();
-    auto caches       = std::make_unique<Eval::NNUE::AccumulatorCaches>(networks);
+    auto smallNetwork = Eval::NNUE::NetworkSmall(Eval::NNUE::EvalFile{}, Eval::NNUE::EmbeddedNNUEType::SMALL);
+    struct {
+        const Eval::NNUE::NetworkBig&   big;
+        const Eval::NNUE::NetworkSmall& small;
+    } networksForCaches{network, smallNetwork};
+    auto caches = std::make_unique<Eval::NNUE::AccumulatorCaches>(networksForCaches);
 
     std::stringstream ss;
     ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2);
-    ss << '\n' << NNUE::trace(pos, networks, *caches) << '\n';
-
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    auto [psqt, positional] = networks.big.evaluate(pos, *accumulators, caches->big);
+    auto [psqt, positional] = network.evaluate(pos, *accumulators, caches->big);
     Value v                 = psqt + positional;
     v                       = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
 
-    v = evaluate(networks.big, pos, *accumulators, *caches, VALUE_ZERO);
+    v = evaluate(network, pos, *accumulators, *caches, VALUE_ZERO);
     v = pos.side_to_move() == WHITE ? v : -v;
     ss << "Final evaluation       " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)";
     ss << " [with scaled NNUE, ...]";
