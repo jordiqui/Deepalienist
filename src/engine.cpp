@@ -83,7 +83,7 @@ Engine::Engine(std::optional<std::string> path) :
     threads(),
     networks(numaContext,
              // Heap-allocate because sizeof(NN::Networks) is large
-             std::make_unique<NN::Networks>(NN::EvalFile{EvalFileDefaultNameBig, "None", ""},
+             std::make_unique<NN::Networks>(NN::EvalFile{EvalFileDefaultName, "None", ""},
                                             NN::EvalFile{EvalFileDefaultNameSmall, "None", ""})) {
 
     pos.set(StartFEN, false, &states->back());
@@ -190,7 +190,7 @@ Engine::Engine(std::optional<std::string> path) :
                 }));
 
     options.add(  //
-      "EvalFile", Option(EvalFileDefaultNameBig, [this](const Option& o) {
+      "EvalFile", Option(EvalFileDefaultName, [this](const Option& o) {
           load_big_network(o);
           return std::nullopt;
       }));

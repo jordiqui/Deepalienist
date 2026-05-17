@@ -12,7 +12,7 @@ if [ -z "$sha256sum" ]; then
 fi
 
 get_nnue_filename() {
-  grep "$1" evaluate.h | grep "#define" | sed "s/.*\(nn-[a-z0-9]\{12\}.nnue\).*/\1/"
+  awk -v key="$1" '$1 == "#define" && $2 == key { gsub(/"/, "", $3); print $3; found=1; exit } END { if (!found) exit 1 }' evaluate.h
 }
 
 validate_network() {
@@ -74,5 +74,5 @@ fetch_network() {
   return 1
 }
 
-fetch_network EvalFileDefaultNameBig &&
+fetch_network EvalFileDefaultName &&
   fetch_network EvalFileDefaultNameSmall
