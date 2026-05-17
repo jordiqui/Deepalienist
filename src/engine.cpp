@@ -195,11 +195,6 @@ Engine::Engine(std::optional<std::string> path) :
           return std::nullopt;
       }));
 
-    options.add(  //
-      "EvalFileSmall", Option(EvalFileDefaultNameSmall, [this](const Option& o) {
-          load_small_network(o);
-          return std::nullopt;
-      }));
 
     load_networks();
     resize_threads();
@@ -365,7 +360,6 @@ void Engine::verify_networks() const {
 void Engine::load_networks() {
     networks.modify_and_replicate([this](NN::Networks& networks_) {
         networks_.big.load(binaryDirectory, options["EvalFile"]);
-        networks_.small.load(binaryDirectory, options["EvalFileSmall"]);
     });
     threads.clear();
     threads.ensure_network_replicated();
@@ -374,13 +368,6 @@ void Engine::load_networks() {
 void Engine::load_big_network(const std::string& file) {
     networks.modify_and_replicate(
       [this, &file](NN::Networks& networks_) { networks_.big.load(binaryDirectory, file); });
-    threads.clear();
-    threads.ensure_network_replicated();
-}
-
-void Engine::load_small_network(const std::string& file) {
-    networks.modify_and_replicate(
-      [this, &file](NN::Networks& networks_) { networks_.small.load(binaryDirectory, file); });
     threads.clear();
     threads.ensure_network_replicated();
 }
