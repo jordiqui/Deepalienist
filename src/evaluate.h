@@ -22,6 +22,7 @@
 #include <string>
 
 #include "types.h"
+#include "nnue/network.h"
 
 namespace Stockfish {
 
@@ -44,7 +45,7 @@ class AccumulatorStack;
 
 std::string trace(Position& pos, const Eval::NNUE::Networks& networks);
 
-Value evaluate(const NNUE::Networks&          networks,
+Value evaluate(const NNUE::NetworkBig&        network,
                const Position&                pos,
                Eval::NNUE::AccumulatorStack&  accumulators,
                Eval::NNUE::AccumulatorCaches& caches,
