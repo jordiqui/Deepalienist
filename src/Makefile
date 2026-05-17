@@ -1066,12 +1066,11 @@ profile-build: net config-sanity objclean profileclean
 	@if [ "$(comp)" = "clang" ]; then \
 	  LLVM_PROFILE_FILE="default.profraw" $(WINE_PATH) "./$(EXE)" bench >> PGOBENCH.out 2>&1 || (echo ""; echo "PGOBENCH FAILED. Last 80 lines:"; tail -n 80 PGOBENCH.out; exit 1); \
 	else \
-	  BIG="$(abspath $(NNUE_BIG))"; SMALL="$(abspath $(NNUE_SMALL))"; \
+	  BIG="$(abspath $(NNUE_BIG))"; \
 	  if [ "$(target_windows)" = "yes" ] && command -v cygpath > /dev/null 2>&1; then \
 	    BIG="$$(cygpath -w "$(abspath $(NNUE_BIG))")"; \
-	    SMALL="$$(cygpath -w "$(abspath $(NNUE_SMALL))")"; \
-	  fi; \
-	  printf "uci\nsetoption name EvalFile value %s\nsetoption name EvalFileSmall value %s\nisready\nbench\nquit\n" "$$BIG" "$$SMALL" | $(WINE_PATH) "./$(EXE)" >> PGOBENCH.out 2>&1 || (echo ""; echo "PGOBENCH FAILED. Last 80 lines:"; tail -n 80 PGOBENCH.out; exit 1); \
+		  fi; \
+	  printf "uci\nsetoption name EvalFile value %s\nisready\nbench\nquit\n" "$$BIG" | $(WINE_PATH) "./$(EXE)" >> PGOBENCH.out 2>&1 || (echo ""; echo "PGOBENCH FAILED. Last 80 lines:"; tail -n 80 PGOBENCH.out; exit 1); \
 	fi
 	tail -n 4 PGOBENCH.out
 	@echo ""
