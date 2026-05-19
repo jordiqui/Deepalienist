@@ -272,9 +272,9 @@ void Search::Worker::iterative_deepening() {
 
     Move pv[MAX_PLY + 1];
 
-    Depth lastBestMoveDepth = 0;
-    Value lastBestScore     = -VALUE_INFINITE;
-    auto  lastBestPV        = std::vector{Move::none()};
+    Depth             lastBestMoveDepth = 0;
+    Value             lastIterationScore = -VALUE_INFINITE;
+    std::vector<Move> lastIterationPV    = std::vector{Move::none()};
 
     Value  alpha, beta;
     Value  bestValue     = -VALUE_INFINITE;
@@ -449,22 +449,37 @@ void Search::Worker::iterative_deepening() {
         if (!threads.stop)
             completedDepth = rootDepth;
 
-        // We make sure not to pick an unproven mated-in score,
-        // in case this thread prematurely stopped search (aborted-search).
-        if (threads.abortedSearch && rootMoves[0].score != -VALUE_INFINITE
-            && is_loss(rootMoves[0].score))
+        const bool forgottenMate =
+          lastIterationScore != -VALUE_INFINITE && is_decisive(lastIterationScore)
+       && (std::abs(rootMoves[0].score) < std::abs(lastIterationScore)
+           || rootMoves[0].score_is_bound());
+
+        if (!threads.stop && !forgottenMate && rootMoves[0].pv[0] != lastIterationPV[0])
         {
-            // Bring the last best move to the front for best thread selection.
-            Utility::move_to_front(rootMoves, [&lastBestPV = std::as_const(lastBestPV)](
-                                                const auto& rm) { return rm == lastBestPV[0]; });
-            rootMoves[0].pv    = lastBestPV;
-            rootMoves[0].score = rootMoves[0].uciScore = lastBestScore;
+            lastIterationPV    = rootMoves[0].pv;
+            lastIterationScore = rootMoves[0].score;
+            lastBestMoveDepth  = rootDepth;
         }
-        else if (rootMoves[0].pv[0] != lastBestPV[0])
+
+        const bool abortedLossSearch =
+          threads.stop && !pvIdx && rootMoves[0].score != -VALUE_INFINITE && is_loss(rootMoves[0].score)
+       && !rootMoves[0].score_is_bound();
+
+        if (abortedLossSearch || forgottenMate)
         {
-            lastBestPV        = rootMoves[0].pv;
-            lastBestScore     = rootMoves[0].score;
-            lastBestMoveDepth = rootDepth;
+            if (!lastIterationPV.empty() && lastIterationPV[0] != Move::none())
+            {
+                Utility::move_to_front(rootMoves,
+                                       [&lastIterationPV = std::as_const(lastIterationPV)](
+                                         const auto& rm) { return rm == lastIterationPV[0]; });
+                rootMoves[0].pv       = lastIterationPV;
+                rootMoves[0].score    = rootMoves[0].uciScore = lastIterationScore;
+                rootMoves[0].unset_bound_flags();
+            }
+            else if (abortedLossSearch)
+            {
+                rootMoves[0].scoreLowerbound = true;
+            }
         }
 
         if (!mainThread)
@@ -707,6 +722,8 @@ Value Search::Worker::search(
     ss->statScore       = 0;
     (ss + 2)->cutoffCnt = 0;
 
+    const auto correctionValue      = correction_value(*this, pos, ss);
+
     // Step 4. Transposition table lookup
     excludedMove                   = ss->excludedMove;
     posKey                         = pos.key();
@@ -720,7 +737,6 @@ Value Search::Worker::search(
 
     // Step 6. Static evaluation of the position
     Value      unadjustedStaticEval = VALUE_NONE;
-    const auto correctionValue      = correction_value(*this, pos, ss);
     // Skip early pruning when in check
     if (ss->inCheck)
         ss->staticEval = eval = (ss - 2)->staticEval;
