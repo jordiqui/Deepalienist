@@ -88,6 +88,8 @@ struct RootMove {
         pv(1, m) {}
     bool extract_ponder_from_tt(const TranspositionTable& tt, Position& pos);
     bool operator==(const Move& m) const { return pv[0] == m; }
+    bool score_is_bound() const { return scoreLowerbound || scoreUpperbound; }
+    void unset_bound_flags() { scoreLowerbound = scoreUpperbound = false; }
     // Sort in descending order
     bool operator<(const RootMove& m) const {
         return m.score != score ? m.score < score : m.previousScore < previousScore;
