@@ -44,10 +44,9 @@ else
 	EXESUF =
 endif
 BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
-EXE = Deepalienist-4.40-100526-$(BUILD_ARCH_TAG)$(EXESUF)
+EXE = Deepalienist-4.70-190526-$(BUILD_ARCH_TAG)$(EXESUF)
 
-NNUE_BIG = nn-83a0d6daf7e5.nnue
-NNUE_SMALL = nn-47fc8b7fff06.nnue
+NNUE_NET = nn-83a0d6daf7e5.nnue
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -1060,17 +1059,16 @@ profile-build: net config-sanity objclean profileclean
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
-	@src="$(abspath $(NNUE_BIG))";   dst="$(EXE_DIR)$(NNUE_BIG)";   [ "$$src" = "$$dst" ] || cp -f "$$src" "$$dst"
-	@src="$(abspath $(NNUE_SMALL))"; dst="$(EXE_DIR)$(NNUE_SMALL)"; [ "$$src" = "$$dst" ] || cp -f "$$src" "$$dst"
-	@(echo "=== PGOBENCH preflight ==="; \
+	@src="$(abspath $(NNUE_NET))";   dst="$(EXE_DIR)$(NNUE_NET)";   [ "$$src" = "$$dst" ] || cp -f "$$src" "$$dst"
+		@(echo "=== PGOBENCH preflight ==="; \
 	  pwd; \
-	  ls -lh "./$(EXE)" "$(NNUE_BIG)" "$(NNUE_SMALL)") > PGOBENCH.out 2>&1
+	  ls -lh "./$(EXE)" "$(NNUE_NET)") > PGOBENCH.out 2>&1
 	@if [ "$(comp)" = "clang" ]; then \
 	  LLVM_PROFILE_FILE="default.profraw" $(WINE_PATH) "./$(EXE)" bench >> PGOBENCH.out 2>&1 || (echo ""; echo "PGOBENCH FAILED. Last 80 lines:"; tail -n 80 PGOBENCH.out; exit 1); \
 	else \
-	  BIG="$(abspath $(NNUE_BIG))"; \
+	  BIG="$(abspath $(NNUE_NET))"; \
 	  if [ "$(target_windows)" = "yes" ] && command -v cygpath > /dev/null 2>&1; then \
-	    BIG="$$(cygpath -w "$(abspath $(NNUE_BIG))")"; \
+	    BIG="$$(cygpath -w "$(abspath $(NNUE_NET))")"; \
 		  fi; \
 	  printf "uci\nsetoption name EvalFile value %s\nisready\nbench\nquit\n" "$$BIG" | $(WINE_PATH) "./$(EXE)" >> PGOBENCH.out 2>&1 || (echo ""; echo "PGOBENCH FAILED. Last 80 lines:"; tail -n 80 PGOBENCH.out; exit 1); \
 	fi
@@ -1116,7 +1114,7 @@ profileclean:
 
 # evaluation network (nnue)
 net:
-	@NNUE_BIG=$(NNUE_BIG) NNUE_SMALL=$(NNUE_SMALL) $(SHELL) ../scripts/net.sh
+	@NNUE_NET=$(NNUE_NET) $(SHELL) ../scripts/net.sh
 
 format:
 	$(CLANG-FORMAT) -i $(SRCS) $(HEADERS) -style=file
