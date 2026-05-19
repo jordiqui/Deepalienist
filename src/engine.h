@@ -120,7 +120,7 @@ class Engine {
     OptionsMap                                         options;
     ThreadPool                                         threads;
     TranspositionTable                                 tt;
-    LazyNumaReplicatedSystemWide<Eval::NNUE::Networks> networks;
+    LazyNumaReplicatedSystemWide<Eval::NNUE::Network> networks;
     BookManager                                       bookManager;
 
     Search::SearchManager::UpdateContext  updateContext;

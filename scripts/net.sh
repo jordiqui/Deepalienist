@@ -74,5 +74,4 @@ fetch_network() {
   return 1
 }
 
-fetch_network EvalFileDefaultName &&
-  fetch_network EvalFileDefaultNameSmall
+fetch_network EvalFileDefaultName

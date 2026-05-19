@@ -26,7 +26,6 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
-#include <tuple>
 
 #include "nnue/network.h"
 #include "nnue/nnue_misc.h"
@@ -37,20 +36,17 @@
 
 namespace Stockfish {
 
-// Returns a static, purely materialistic evaluation of the position from
-// the point of view of the side to move. It can be divided by PawnValue to get
-// an approximation of the material advantage on the board in terms of pawns.
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
-Value Eval::evaluate(const Eval::NNUE::NetworkBig&   network,
-                     const Position&                 pos,
-                     Eval::NNUE::AccumulatorStack&   accumulators,
-                     Eval::NNUE::AccumulatorCaches&  caches,
-                     int                             optimism) {
+Value Eval::evaluate(const Eval::NNUE::Network&     network,
+                     const Position&                pos,
+                     Eval::NNUE::AccumulatorStack&  accumulators,
+                     Eval::NNUE::AccumulatorCaches& caches,
+                     int                            optimism) {
 
     assert(!pos.checkers());
 
-    auto [psqt, positional] = network.evaluate(pos, accumulators, caches.big);
+    auto [psqt, positional] = network.evaluate(pos, accumulators, caches);
 
     Value nnue = (125 * psqt + 131 * positional) / 128;
 
@@ -75,33 +71,32 @@ Value Eval::evaluate(const Eval::NNUE::NetworkBig&   network,
 // a string (suitable for outputting to stdout) that contains the detailed
 // descriptions and values of each evaluation term. Useful for debugging.
 // Trace scores are from white's point of view
-std::string Eval::trace(Position& pos, const Eval::NNUE::NetworkBig& network) {
+std::string Eval::trace(Position& pos, const Eval::NNUE::Network& network) {
 
     if (pos.checkers())
         return "Final evaluation: none (in check)";
 
     auto accumulators = std::make_unique<Eval::NNUE::AccumulatorStack>();
-    auto smallNetwork = Eval::NNUE::NetworkSmall(Eval::NNUE::EvalFile{}, Eval::NNUE::EmbeddedNNUEType::SMALL);
-    struct {
-        const Eval::NNUE::NetworkBig&   big;
-        const Eval::NNUE::NetworkSmall& small;
-    } networksForCaches{network, smallNetwork};
-    auto caches = std::make_unique<Eval::NNUE::AccumulatorCaches>(networksForCaches);
+    auto caches       = std::make_unique<Eval::NNUE::AccumulatorCaches>(network);
 
     std::stringstream ss;
     ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2);
+    ss << '\n' << NNUE::trace(pos, network, *caches) << '\n';
+
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    auto [psqt, positional] = network.evaluate(pos, *accumulators, caches->big);
+    auto [psqt, positional] = network.evaluate(pos, *accumulators, *caches);
     Value v                 = psqt + positional;
-    v                       = pos.side_to_move() == WHITE ? v : -v;
+    ss << "NNUE evaluation          " << v << " (side to move, internal units)\n";
+    v = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
 
     v = evaluate(network, pos, *accumulators, *caches, VALUE_ZERO);
     v = pos.side_to_move() == WHITE ? v : -v;
-    ss << "Final evaluation       " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)";
-    ss << " [with scaled NNUE, ...]";
-    ss << "\n";
+
+    ss << "Final evaluation      ";
+    ss << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)";
+    ss << " [with scaled NNUE, ...]\n";
 
     return ss.str();
 }
