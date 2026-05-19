@@ -22,7 +22,6 @@
 #include <string>
 
 #include "types.h"
-#include "nnue/network.h"
 
 namespace Stockfish {
 
@@ -35,17 +34,16 @@ namespace Eval {
 // name of the macro or the location where this macro is defined, as it is used
 // in the Makefile/Fishtest.
 #define EvalFileDefaultName "nn-83a0d6daf7e5.nnue"
-#define EvalFileDefaultNameSmall "nn-47fc8b7fff06.nnue"
 
 namespace NNUE {
-struct Networks;
+class Network;
 struct AccumulatorCaches;
 class AccumulatorStack;
 }
 
-std::string trace(Position& pos, const NNUE::NetworkBig& network);
+std::string trace(Position& pos, const Eval::NNUE::Network& network);
 
-Value evaluate(const NNUE::NetworkBig&        network,
+Value evaluate(const NNUE::Network&           network,
                const Position&                pos,
                Eval::NNUE::AccumulatorStack&  accumulators,
                Eval::NNUE::AccumulatorCaches& caches,
