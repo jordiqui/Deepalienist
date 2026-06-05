@@ -46,7 +46,7 @@ endif
 BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
 EXE = Deepalienist-4.70-190526-$(BUILD_ARCH_TAG)$(EXESUF)
 
-NNUE_NET = nn-83a0d6daf7e5.nnue
+NNUE_NET = nn-71d6d32cb962.nnue
 
 ### Installation dir definitions
 PREFIX = /usr/local
