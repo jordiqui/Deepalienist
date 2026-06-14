@@ -89,24 +89,27 @@ struct RootMove {
     bool extract_ponder_from_tt(const TranspositionTable& tt, Position& pos);
     bool operator==(const Move& m) const { return pv[0] == m; }
     bool score_is_bound() const { return scoreLowerbound || scoreUpperbound; }
+    bool score_is_exact_loss() const {
+        return score != -VALUE_INFINITE && is_loss(score) && !score_is_bound();
+    }
     void unset_bound_flags() { scoreLowerbound = scoreUpperbound = false; }
     // Sort in descending order
     bool operator<(const RootMove& m) const {
         return m.score != score ? m.score < score : m.previousScore < previousScore;
     }
 
-    u64          effort           = 0;
-    Value             score            = -VALUE_INFINITE;
-    Value             previousScore    = -VALUE_INFINITE;
-    Value             averageScore     = -VALUE_INFINITE;
-    Value             meanSquaredScore = -VALUE_INFINITE * VALUE_INFINITE;
-    Value             uciScore         = -VALUE_INFINITE;
-    bool              scoreLowerbound  = false;
-    bool              scoreUpperbound  = false;
-    int               selDepth         = 0;
-    int               tbRank           = 0;
-    Value             tbScore;
-    std::vector<Move> pv;
+    u64     effort           = 0;
+    Value   score            = -VALUE_INFINITE;
+    Value   previousScore    = -VALUE_INFINITE;
+    Value   averageScore     = -VALUE_INFINITE;
+    Value   meanSquaredScore = -VALUE_INFINITE * VALUE_INFINITE;
+    Value   uciScore         = -VALUE_INFINITE;
+    bool    scoreLowerbound  = false;
+    bool    scoreUpperbound  = false;
+    int     selDepth         = 0;
+    int     tbRank           = 0;
+    Value   tbScore;
+    std::vector<Move> pv, previousPV;
 };
 
 using RootMoves = std::vector<RootMove>;
@@ -333,7 +336,7 @@ class Worker {
     LimitsType limits;
 
     usize                pvIdx, pvLast;
-    std::atomic<u64> nodes, tbHits, bestMoveChanges;
+    RelaxedAtomic<u64> nodes, tbHits, bestMoveChanges;
     int                   selDepth, nmpMinPly;
 
     Value optimism[COLOR_NB];
@@ -344,7 +347,7 @@ class Worker {
     Depth     rootDepth, completedDepth;
     Value     rootDelta;
 
-    usize                    threadIdx, numaThreadIdx, numaTotal;
+    usize                     threadIdx, numaThreadIdx, numaTotal;
     NumaReplicatedAccessToken numaAccessToken;
 
     // Reductions lookup table initialized at startup
