@@ -8,7 +8,6 @@ import time
 
 from testing import (
     EPD,
-    TSAN,
     Stockfish as Engine,
     MiniTestFramework,
     OrderedClassMembers,
@@ -542,7 +541,6 @@ if __name__ == "__main__":
     args = parse_args()
 
     EPD.create_bench_epd()
-    TSAN.set_tsan_option()
     Syzygy.download_syzygy()
 
     framework = MiniTestFramework()
@@ -551,7 +549,6 @@ if __name__ == "__main__":
     framework.run([TestCLI, TestInteractive, TestClockSimulation, TestSyzygy])
 
     EPD.delete_bench_epd()
-    TSAN.unset_tsan_option()
 
     if framework.has_failed():
         sys.exit(1)
