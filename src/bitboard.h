@@ -58,8 +58,8 @@ constexpr Bitboard Rank6BB = Rank1BB << (8 * 5);
 constexpr Bitboard Rank7BB = Rank1BB << (8 * 6);
 constexpr Bitboard Rank8BB = Rank1BB << (8 * 7);
 
-extern uint8_t PopCnt16[1 << 16];
-extern uint8_t SquareDistance[SQUARE_NB][SQUARE_NB];
+extern u8 PopCnt16[1 << 16];
+extern u8 SquareDistance[SQUARE_NB][SQUARE_NB];
 
 extern Bitboard BetweenBB[SQUARE_NB][SQUARE_NB];
 extern Bitboard LineBB[SQUARE_NB][SQUARE_NB];
@@ -220,7 +220,7 @@ inline int popcount(Bitboard b) {
 
 #ifndef USE_POPCNT
 
-    std::uint16_t indices[4];
+    u16 indices[4];
     std::memcpy(indices, &b, sizeof(b));
     return PopCnt16[indices[0]] + PopCnt16[indices[1]] + PopCnt16[indices[2]]
          + PopCnt16[indices[3]];
@@ -256,12 +256,12 @@ inline Square lsb(Bitboard b) {
 
     if (b & 0xffffffff)
     {
-        _BitScanForward(&idx, int32_t(b));
+        _BitScanForward(&idx, i32(b));
         return Square(idx);
     }
     else
     {
-        _BitScanForward(&idx, int32_t(b >> 32));
+        _BitScanForward(&idx, i32(b >> 32));
         return Square(idx + 32);
     }
     #endif
@@ -291,12 +291,12 @@ inline Square msb(Bitboard b) {
 
     if (b >> 32)
     {
-        _BitScanReverse(&idx, int32_t(b >> 32));
+        _BitScanReverse(&idx, i32(b >> 32));
         return Square(idx + 32);
     }
     else
     {
-        _BitScanReverse(&idx, int32_t(b));
+        _BitScanReverse(&idx, i32(b));
         return Square(idx);
     }
     #endif

@@ -33,7 +33,7 @@ namespace Stockfish {
 class Position;
 class Move;
 class Score;
-enum Square : uint8_t;
+enum Square : u8;
 using Value = int;
 
 class UCIEngine {
@@ -68,7 +68,7 @@ class UCIEngine {
     void          benchmark(std::istream& args);
     void          position(std::istringstream& is);
     void          setoption(std::istringstream& is);
-    std::uint64_t perft(const Search::LimitsType&);
+    u64 perft(const Search::LimitsType&);
 
     void on_update_no_moves(const Engine::InfoShort& info);
     void on_update_full(const Engine::InfoFull& info, bool showWDL);
