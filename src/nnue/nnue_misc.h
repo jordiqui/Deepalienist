@@ -49,7 +49,7 @@ struct NnueEvalTrace {
 
     Value       psqt[LayerStacks];
     Value       positional[LayerStacks];
-    std::size_t correctBucket;
+    usize correctBucket;
 };
 
 class Network;

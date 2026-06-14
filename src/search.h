@@ -95,7 +95,7 @@ struct RootMove {
         return m.score != score ? m.score < score : m.previousScore < previousScore;
     }
 
-    uint64_t          effort           = 0;
+    u64          effort           = 0;
     Value             score            = -VALUE_INFINITE;
     Value             previousScore    = -VALUE_INFINITE;
     Value             averageScore     = -VALUE_INFINITE;
@@ -128,7 +128,7 @@ struct LimitsType {
     std::vector<std::string> searchmoves;
     TimePoint                time[COLOR_NB], inc[COLOR_NB], npmsec, movetime, startTime;
     int                      movestogo, depth, mate, perft, infinite;
-    uint64_t                 nodes;
+    u64                 nodes;
     bool                     ponderMode;
 };
 
@@ -171,13 +171,13 @@ struct InfoShort {
 
 struct InfoFull: InfoShort {
     int              selDepth;
-    size_t           multiPV;
+    usize           multiPV;
     std::string_view wdl;
     std::string_view bound;
-    size_t           timeMs;
-    size_t           nodes;
-    size_t           nps;
-    size_t           tbHits;
+    usize           timeMs;
+    usize           nodes;
+    usize           nps;
+    usize           tbHits;
     std::string_view pv;
     int              hashfull;
 };
@@ -185,7 +185,7 @@ struct InfoFull: InfoShort {
 struct InfoIteration {
     int              depth;
     std::string_view currmove;
-    size_t           currmovenumber;
+    usize           currmovenumber;
 };
 
 // Skill structure is used to implement strength limit. If we have a UCI_Elo,
@@ -210,7 +210,7 @@ struct Skill {
     }
     bool enabled() const { return level < 20.0; }
     bool time_to_pick(Depth depth) const { return depth == 1 + int(level); }
-    Move pick_best(const RootMoves&, size_t multiPV);
+    Move pick_best(const RootMoves&, usize multiPV);
 
     double level;
     Move   best = Move::none();
@@ -254,7 +254,7 @@ class SearchManager: public ISearchManager {
     Value                bestPreviousAverageScore;
     bool                 stopOnPonderhit;
 
-    size_t id;
+    usize id;
 
     const UpdateContext& updates;
 };
@@ -271,9 +271,9 @@ class Worker {
    public:
     Worker(SharedState&,
            std::unique_ptr<ISearchManager>,
-           size_t,
-           size_t,
-           size_t,
+           usize,
+           usize,
+           usize,
            NumaReplicatedAccessToken);
 
     // Called at instantiation to initialize reductions tables.
@@ -332,8 +332,8 @@ class Worker {
 
     LimitsType limits;
 
-    size_t                pvIdx, pvLast;
-    std::atomic<uint64_t> nodes, tbHits, bestMoveChanges;
+    usize                pvIdx, pvLast;
+    std::atomic<u64> nodes, tbHits, bestMoveChanges;
     int                   selDepth, nmpMinPly;
 
     Value optimism[COLOR_NB];
@@ -344,7 +344,7 @@ class Worker {
     Depth     rootDepth, completedDepth;
     Value     rootDelta;
 
-    size_t                    threadIdx, numaThreadIdx, numaTotal;
+    usize                    threadIdx, numaThreadIdx, numaTotal;
     NumaReplicatedAccessToken numaAccessToken;
 
     // Reductions lookup table initialized at startup
