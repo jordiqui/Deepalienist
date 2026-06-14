@@ -51,7 +51,7 @@ jobs:
 
       - name: Download SDE package
         if: runner.os == 'Linux' || runner.os == 'Windows'
-        uses: petarpetrovt/setup-sde@f0fa5971dc275704531e94264dd23250c442aa41 # @v2.4
+        uses: petarpetrovt/setup-sde@31aa4a8e85e109bef00f1d838613fcc6ec421271 # v5.0
         with:
           environmentVariableName: SDE_DIR
           sdeVersion: 9.33.0

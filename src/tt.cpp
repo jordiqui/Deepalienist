@@ -112,7 +112,8 @@ void TTEntry::save(
     }
     else if (depth8 + DEPTH_ENTRY_OFFSET >= 5 && is_decisive(value16)
              && Bound(genBound8 & 0x3) != BOUND_EXACT)
-        depth8--;
+        depth8 = std::max(int(depth8) - 1,
+                          0);  // guard against racy underflows, default to "unoccupied"
 }
 
 
