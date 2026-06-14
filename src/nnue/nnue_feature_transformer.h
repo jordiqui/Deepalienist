@@ -204,21 +204,15 @@ class FeatureTransformer {
 
         using namespace SIMD;
         accumulatorStack.evaluate(pos, *this, cache);
-        const auto& accumulatorState       = accumulatorStack.latest<PSQFeatureSet>();
-        const auto& threatAccumulatorState = accumulatorStack.latest<ThreatFeatureSet>();
+        const auto& accumulatorState = accumulatorStack.latest();
 
         const Color perspectives[2]  = {pos.side_to_move(), ~pos.side_to_move()};
         const auto& psqtAccumulation = accumulatorState.psqtAccumulation;
-        auto        psqt =
-          (psqtAccumulation[perspectives[0]][bucket] - psqtAccumulation[perspectives[1]][bucket]);
+        const auto  psqt =
+          (psqtAccumulation[perspectives[0]][bucket] - psqtAccumulation[perspectives[1]][bucket])
+          / 2;
 
-        const auto& threatPsqtAccumulation = threatAccumulatorState.psqtAccumulation;
-        psqt                               = (psqt + threatPsqtAccumulation[perspectives[0]][bucket]
-                - threatPsqtAccumulation[perspectives[1]][bucket])
-             / 2;
-
-        const auto& accumulation       = accumulatorState.accumulation;
-        const auto& threatAccumulation = threatAccumulatorState.accumulation;
+        const auto& accumulation = accumulatorState.accumulation;
 
         for (IndexType p = 0; p < 2; ++p)
         {
@@ -298,16 +292,12 @@ class FeatureTransformer {
               6;
     #endif
 
-            const vec_t* tin0 =
-              reinterpret_cast<const vec_t*>(&(threatAccumulation[perspectives[p]][0]));
-            const vec_t* tin1 = reinterpret_cast<const vec_t*>(
-              &(threatAccumulation[perspectives[p]][HalfDimensions / 2]));
             for (IndexType j = 0; j < NumOutputChunks; ++j)
             {
-                const vec_t acc0a = vec_add_16(in0[j * 2 + 0], tin0[j * 2 + 0]);
-                const vec_t acc0b = vec_add_16(in0[j * 2 + 1], tin0[j * 2 + 1]);
-                const vec_t acc1a = vec_add_16(in1[j * 2 + 0], tin1[j * 2 + 0]);
-                const vec_t acc1b = vec_add_16(in1[j * 2 + 1], tin1[j * 2 + 1]);
+                const vec_t acc0a = in0[j * 2 + 0];
+                const vec_t acc0b = in0[j * 2 + 1];
+                const vec_t acc1a = in1[j * 2 + 0];
+                const vec_t acc1b = in1[j * 2 + 1];
 
                 const vec_t sum0a = vec_slli_16(vec_max_16(vec_min_16(acc0a, FtMax), Zero), shift);
                 const vec_t sum0b = vec_slli_16(vec_max_16(vec_min_16(acc0b, FtMax), Zero), shift);
@@ -327,10 +317,6 @@ class FeatureTransformer {
                 BiasType sum0 = accumulation[static_cast<int>(perspectives[p])][j + 0];
                 BiasType sum1 =
                   accumulation[static_cast<int>(perspectives[p])][j + HalfDimensions / 2];
-
-                sum0 += threatAccumulation[static_cast<int>(perspectives[p])][j + 0];
-                sum1 +=
-                  threatAccumulation[static_cast<int>(perspectives[p])][j + HalfDimensions / 2];
 
                 sum0 = std::clamp<BiasType>(sum0, 0, FtMaxVal);
                 sum1 = std::clamp<BiasType>(sum1, 0, FtMaxVal);

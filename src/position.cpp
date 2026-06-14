@@ -200,6 +200,27 @@ Position& Position::set(const string& fenStr, bool isChess960, StateInfo* si) {
       incremented after Black's move.
 */
 
+    Bitboard           fenPawns = 0;
+    Square             fenSq    = SQ_A8;
+    for (char c : fenStr)
+    {
+        if (isspace(static_cast<unsigned char>(c)))
+            break;
+        if (isdigit(static_cast<unsigned char>(c)))
+            fenSq += (c - '0') * EAST;
+        else if (c == '/')
+            fenSq += 2 * SOUTH;
+        else
+        {
+            if (c == 'P' || c == 'p')
+                fenPawns |= fenSq;
+            ++fenSq;
+        }
+    }
+
+    if (fenPawns & (Rank1BB | Rank8BB))
+        return *this;
+
     unsigned char      col, row, token;
     usize             idx;
     Square             sq = SQ_A8;
@@ -803,18 +824,6 @@ void Position::do_move(Move                      m,
         k ^= Zobrist::castling[st->castlingRights];
     }
 
-    // Move the piece. The tricky Chess960 castling is handled earlier
-    if (m.type_of() != CASTLING)
-    {
-        if (captured && m.type_of() != EN_PASSANT)
-        {
-            remove_piece(from, &dts);
-            swap_piece(to, pc, &dts);
-        }
-        else
-            move_piece(from, to, &dts);
-    }
-
     // If the moving piece is a pawn do some special extra work
     if (type_of(pc) == PAWN)
     {
@@ -830,8 +839,6 @@ void Position::do_move(Move                      m,
             assert(relative_rank(us, to) == RANK_8);
             assert(type_of(promotion) >= KNIGHT && type_of(promotion) <= QUEEN);
 
-            swap_piece(to, promotion, &dts);
-
             dp.add_pc = promotion;
             dp.add_sq = to;
             dp.to     = SQ_NONE;
@@ -839,8 +846,8 @@ void Position::do_move(Move                      m,
             // Update hash keys
             // Zobrist::psq[pc][to] is zero, so we don't need to clear it
             k ^= Zobrist::psq[promotion][to];
-            st->materialKey ^= Zobrist::psq[promotion][8 + pieceCount[promotion] - 1]
-                             ^ Zobrist::psq[pc][8 + pieceCount[pc]];
+            st->materialKey ^= Zobrist::psq[promotion][8 + pieceCount[promotion]]
+                             ^ Zobrist::psq[pc][8 + pieceCount[pc] - 1];
             st->nonPawnKey[us] ^= Zobrist::psq[promotion][to];
 
             if (promotionType <= BISHOP)
@@ -876,6 +883,27 @@ void Position::do_move(Move                      m,
         prefetch(&history->minor_piece_correction_entry(*this));
         prefetch(&history->nonpawn_correction_entry<WHITE>(*this));
         prefetch(&history->nonpawn_correction_entry<BLACK>(*this));
+    }
+
+    // Move the piece. The tricky Chess960 castling is handled earlier
+    if (m.type_of() != CASTLING)
+    {
+        Piece toPc = pc;
+        if (m.type_of() == PROMOTION)
+            toPc = make_piece(us, m.promotion_type());
+
+        if (captured && m.type_of() != EN_PASSANT)
+        {
+            remove_piece(from, &dts);
+            swap_piece(to, toPc, &dts);
+        }
+        else if (pc == toPc)
+            move_piece(from, to, &dts);
+        else
+        {
+            remove_piece(from, &dts);
+            put_piece(toPc, to, &dts);
+        }
     }
 
     // Set capture piece
@@ -1518,7 +1546,7 @@ bool Position::material_key_is_ok() const { return compute_material_key() == st-
 // This is meant to be helpful when debugging.
 bool Position::pos_is_ok() const {
 
-    constexpr bool Fast = true;  // Quick (default) or full check?
+    constexpr bool Fast = false;  // fast or full check?
 
     if ((sideToMove != WHITE && sideToMove != BLACK) || piece_on(square<KING>(WHITE)) != W_KING
         || piece_on(square<KING>(BLACK)) != B_KING
