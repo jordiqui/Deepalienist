@@ -37,6 +37,7 @@
 #include <vector>
 #include <cstring>
 
+#include "misc.h"
 #include "shm.h"
 
 // We support linux very well, but we explicitly do NOT support Android,
@@ -52,10 +53,6 @@
         #undef _WIN32_WINNT
         #define _WIN32_WINNT 0x0601  // Force to include needed API prototypes
     #endif
-
-// On Windows each processor group can have up to 64 processors.
-// https://learn.microsoft.com/en-us/windows/win32/procthread/processor-groups
-static constexpr usize WIN_PROCESSOR_GROUP_SIZE = 64;
 
     #if !defined(NOMINMAX)
         #define NOMINMAX
@@ -73,12 +70,14 @@ using GetThreadSelectedCpuSetMasks_t = BOOL (*)(HANDLE, PGROUP_AFFINITY, USHORT,
 
 #endif
 
-#include "misc.h"
-
 namespace Stockfish {
 
 using CpuIndex  = usize;
 using NumaIndex = usize;
+
+// On Windows each processor group can have up to 64 processors.
+// https://learn.microsoft.com/en-us/windows/win32/procthread/processor-groups
+static constexpr usize WIN_PROCESSOR_GROUP_SIZE = 64;
 
 inline CpuIndex get_hardware_concurrency() {
     CpuIndex concurrency = std::thread::hardware_concurrency();
