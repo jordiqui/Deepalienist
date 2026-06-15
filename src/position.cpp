@@ -740,8 +740,6 @@ void Position::do_move(Move                      m,
     dp.from           = from;
     dp.to             = to;
     dp.add_sq         = SQ_NONE;
-    dts.us            = us;
-    dts.prevKsq       = square<KING>(us);
     dts.threatenedSqs = dts.threateningSqs = 0;
 
     assert(color_of(pc) == us);
@@ -993,8 +991,6 @@ void Position::do_move(Move                      m,
         }
     }
 
-    dts.ksq = square<KING>(us);
-
     assert(pos_is_ok());
 
     assert(dp.pc != NO_PIECE);
@@ -1208,7 +1204,7 @@ void Position::update_piece_threats(Piece                     pc,
             const Bitboard discovered = ray & (rAttacks | bAttacks) & occupied;
 
             assert(!more_than_one(discovered));
-            if (discovered && (RayPassBB[sliderSq][s] & noRaysContaining) != noRaysContaining)
+            if (discovered && (ray & noRaysContaining) != noRaysContaining)
             {
                 const Square threatenedSq = lsb(discovered);
                 const Piece  threatenedPc = piece_on(threatenedSq);
