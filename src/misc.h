@@ -337,7 +337,7 @@ template<typename T>
 class RelaxedAtomic {
     static constexpr bool UseAtomic =
 #ifdef USE_SLOPPY_ATOMICS
-      !std::atomic<T>::is_always_lock_free || sizeof(T) > sizeof(size_t);
+      !std::atomic<T>::is_always_lock_free || sizeof(T) > sizeof(usize);
 #else
       true;
 #endif
@@ -369,7 +369,7 @@ class RelaxedAtomic {
             return inner;
     }
 
-    RelaxedAtomic& operator+=(int val) {
+    RelaxedAtomic& operator+=(T val) {
         T res = this->load(std::memory_order_relaxed) + val;
         this->store(res, std::memory_order_relaxed);
         return *this;
@@ -399,7 +399,7 @@ class RelaxedAtomic {
         return val;
     }
 
-    RelaxedAtomic& operator-=(int val) {
+    RelaxedAtomic& operator-=(T val) {
         T res = this->load(std::memory_order_relaxed) - val;
         this->store(res, std::memory_order_relaxed);
         return *this;

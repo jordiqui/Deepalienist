@@ -486,7 +486,7 @@ BenchmarkSetup setup_benchmark(std::istream& is) {
     {
         setup.commands.emplace_back("ucinewgame");
         int ply = 1;
-        for (int i = 0; i < static_cast<int>(game.size()); ++i)
+        for (usize i = 0; i < game.size(); ++i)
         {
             const float correctedTime = getCorrectedTime(ply);
             totalTime += correctedTime;
