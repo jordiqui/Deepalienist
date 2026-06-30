@@ -19,6 +19,7 @@
 #include "uci.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -502,6 +503,30 @@ u64 UCIEngine::perft(const Search::LimitsType& limits) {
     return nodes;
 }
 
+namespace {
+
+bool fen_has_pawn_on_first_or_eighth_rank(const std::string& fen) {
+    std::istringstream ss(fen);
+    std::string        board;
+
+    if (!(ss >> board))
+        return false;
+
+    std::array<std::string, 8> ranks;
+    std::istringstream         boardStream(board);
+    std::string                rank;
+    size_t                     idx = 0;
+
+    while (std::getline(boardStream, rank, '/') && idx < ranks.size())
+        ranks[idx++] = rank;
+
+    return idx == ranks.size()
+        && (ranks.front().find_first_of("Pp") != std::string::npos
+            || ranks.back().find_first_of("Pp") != std::string::npos);
+}
+
+}  // namespace
+
 void UCIEngine::position(std::istringstream& is) {
     std::string token, fen;
 
@@ -523,6 +548,12 @@ void UCIEngine::position(std::istringstream& is) {
     while (is >> token)
     {
         moves.push_back(token);
+    }
+
+    if (fen_has_pawn_on_first_or_eighth_rank(fen))
+    {
+        print_info_string("Unsupported position. Pawns on the first or eighth rank.");
+        return;
     }
 
     engine.set_position(fen, moves);
