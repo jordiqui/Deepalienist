@@ -65,8 +65,12 @@ ifeq ($(target_windows),yes)
 else
 	EXESUF =
 endif
+ENGINE_BASENAME = Deepalienist
+RELEASE_TAG = 5.10-130726
 BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
-EXE = Deepalienist-5.0-300626-$(BUILD_ARCH_TAG)$(EXESUF)
+ENGINE_RELEASE_ID = $(ENGINE_BASENAME)-$(RELEASE_TAG)
+ENGINE_PUBLIC_ID = $(ENGINE_RELEASE_ID)-$(BUILD_ARCH_TAG)
+EXE = $(ENGINE_PUBLIC_ID)$(EXESUF)
 
 NNUE_NET = nn-0ee0657fb25e.nnue
 
@@ -941,6 +945,7 @@ endif
 ### 3.8.2 Try to include architecture
 ifneq ($(ARCH), )
 	CXXFLAGS += -DARCH=$(ARCH)
+	CXXFLAGS += -DENGINE_PUBLIC_ID=$(ENGINE_PUBLIC_ID)
 endif
 
 ### 3.9 Link Time Optimization
