@@ -1,10 +1,10 @@
-# Deepalienist-5.0-300626
+# Deepalienist-5.10-130726
 
 <p align="center">
   <img src="assets/revolution-logo.svg" alt="Deepalienist UCI chess engine logo featuring a minimalist French tricolor cockade" width="360" />
 </p>
 
-Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-5.0-300626** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
+Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-5.10-130726** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
 
 ## Overview
 
@@ -199,7 +199,7 @@ make -j build ARCH=x86-64-bmi2 COMP=gcc SSE41_POPCNT_PREFETCH=yes LTO=yes build
 
 El fichero de referencia `src/bench_prefetch_on.txt` documenta los incrementos de nodos/segundo obtenidos en posiciones tácticas con el prefetch activado.
 
-Tras compilar, valida la mejora con el benchmark integrado ejecutando `./Deepalienist-5.0-300626-sse41popcnt bench` desde `src/` o el binario que corresponda a la arquitectura elegida. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
+Tras compilar, valida la mejora con el benchmark integrado ejecutando `./Deepalienist-5.10-130726-sse41-popcnt bench` desde `src/` o el binario que corresponda a la arquitectura elegida. Compara los nodos/segundo frente a una compilación base `ARCH=x86-64-modern` (sin `SSE41_POPCNT_PREFETCH` ni `LTO`) para medir la ganancia en tu hardware.
 
 ### Building for AMD Hawk Point CPUs with FMA3
 
@@ -216,15 +216,15 @@ El objetivo `ARCH=x86-64-FMA3` habilita las instrucciones FMA3 necesarias para a
 
 ## Branding and executable names
 
-Every compiled binary now follows the `Deepalienist-5.0-300626-<arch>` naming scheme so the executable name clearly identifies the instruction-set target used at compile time. Typical examples include:
+Every compiled binary now follows the `Deepalienist-5.10-130726-<arch>` naming scheme so the executable name clearly identifies the instruction-set target used at compile time. Typical examples include:
 
-- `Deepalienist-5.0-300626-sse41popcnt.exe`
-- `Deepalienist-5.0-300626-avx2.exe`
-- `Deepalienist-5.0-300626-avx512.exe`
-- `Deepalienist-5.0-300626-bmi2.exe`
-- `Deepalienist-5.0-300626-fma3.exe`
+- `Deepalienist-5.10-130726-sse41-popcnt.exe`
+- `Deepalienist-5.10-130726-avx2.exe`
+- `Deepalienist-5.10-130726-avx512icl.exe`
+- `Deepalienist-5.10-130726-bmi2.exe`
+- `Deepalienist-5.10-130726-avxvnni.exe`
 
-The same architecture suffix is also reported through the engine UCI identification string, so GUIs show names such as `Deepalienist 5.0-300626+sse41popcnt`, `Deepalienist 5.0-300626+avx2`, `Deepalienist 5.0-300626+bmi2`, `Deepalienist 5.0-300626+fma3`, or `Deepalienist 5.0-300626+avx512`.
+The same architecture suffix is also reported through the engine UCI identification string, so GUIs show names such as `Deepalienist-5.10-130726-sse41-popcnt`, `Deepalienist-5.10-130726-avx2`, `Deepalienist-5.10-130726-bmi2`, `Deepalienist-5.10-130726-avxvnni`, or `Deepalienist-5.10-130726-avx512icl`.
 
 This behavior is directly verifiable with UCI: run the binary and send `uci`; the `id name` line prints the same branded name that Fritz 20 and Cute Chess use in their engine lists/search dialogs.
 

@@ -53,9 +53,6 @@ namespace fs = std::filesystem;
 
 namespace {
 
-// Version number or dev.
-constexpr std::string_view version = "dev";
-
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
 // can toggle the logging of std::cout and std::cin at runtime whilst preserving
@@ -139,38 +136,11 @@ class Logger {
 // For releases (non-dev builds) we only include the version number:
 //      Stockfish version
 std::string engine_version_info() {
-    std::stringstream ss;
-    ss << "Deepalienist-5.0-300626 " << version << std::setfill('0');
-
-    if constexpr (version == "dev")
-    {
-        ss << "-";
-#ifdef GIT_DATE
-        ss << stringify(GIT_DATE);
+#ifdef ENGINE_PUBLIC_ID
+    return stringify(ENGINE_PUBLIC_ID);
 #else
-        constexpr std::string_view months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
-
-        std::string       month, day, year;
-        std::stringstream date(__DATE__);  // From compiler, format is "Sep 21 2008"
-
-        date >> month >> day >> year;
-        ss << year << std::setw(2) << std::setfill('0') << (1 + months.find(month) / 4)
-           << std::setw(2) << std::setfill('0') << day;
+    return "Deepalienist-5.10-130726";
 #endif
-
-        ss << "-";
-
-#ifdef GIT_SHA
-        ss << stringify(GIT_SHA);
-#else
-        ss << "nogit";
-#endif
-#ifdef GIT_DIFFINDEX
-        ss << "-m";
-#endif
-    }
-
-    return ss.str();
 }
 
 std::string engine_info(bool to_uci) {
