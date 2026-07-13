@@ -30,10 +30,9 @@
 #include <exception>  // IWYU pragma: keep
 // IWYU pragma: no_include <__exception/terminate.h>
 #include <functional>
+#include <filesystem>
 #include <iosfwd>
 #include <optional>
-#include <cstring>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -132,9 +131,12 @@ void prefetch(const void* addr) {
 }
 #endif
 
-void start_logger(const std::string& fname);
+void start_logger(const std::filesystem::path& fname);
 
 usize str_to_size_t(const std::string& s);
+
+std::string           utf8_from_wstring(std::wstring_view s);
+std::filesystem::path path_from_utf8(const std::string& path);
 
 #if defined(__linux__)
 
@@ -207,8 +209,8 @@ void sync_cout_start();
 void sync_cout_end();
 
 // True if and only if the binary is compiled on a little-endian machine
-static inline const u16 Le             = 1;
-static inline const bool          IsLittleEndian = *reinterpret_cast<const char*>(&Le) == 1;
+static inline const u16  Le             = 1;
+static inline const bool IsLittleEndian = *reinterpret_cast<const char*>(&Le) == 1;
 
 
 template<typename T, usize MaxSize>
@@ -216,10 +218,16 @@ class ValueList {
 
    public:
     usize size() const { return size_; }
-    int         ssize() const { return int(size_); }
-    void        push_back(const T& value) {
+    int   ssize() const { return int(size_); }
+    void  push_back(const T& value) {
         assert(size_ < MaxSize);
         values_[size_++] = value;
+    }
+    // pushes back value if value < max
+    void push_back_if_lt(const T& value, const T& max) {
+        assert(size_ < MaxSize);
+        values_[size_] = value;
+        size_ += (value < max);
     }
     const T* begin() const { return values_; }
     const T* end() const { return values_ + size_; }
@@ -233,7 +241,7 @@ class ValueList {
     }
 
    private:
-    T           values_[MaxSize];
+    T     values_[MaxSize];
     usize size_ = 0;
 };
 
@@ -280,11 +288,17 @@ class MultiArray {
     using reverse_iterator       = typename ArrayType::reverse_iterator;
     using const_reverse_iterator = typename ArrayType::const_reverse_iterator;
 
-    constexpr auto&       at(size_type index) noexcept { return data_.at(index); }
-    constexpr const auto& at(size_type index) const noexcept { return data_.at(index); }
+    constexpr auto&       at(size_type index) { return data_.at(index); }
+    constexpr const auto& at(size_type index) const { return data_.at(index); }
 
-    constexpr auto&       operator[](size_type index) noexcept { return data_[index]; }
-    constexpr const auto& operator[](size_type index) const noexcept { return data_[index]; }
+    constexpr auto& operator[](size_type index) noexcept {
+        assert(index < Size);
+        return data_[index];
+    }
+    constexpr const auto& operator[](size_type index) const noexcept {
+        assert(index < Size);
+        return data_[index];
+    }
 
     constexpr auto&       front() noexcept { return data_.front(); }
     constexpr const auto& front() const noexcept { return data_.front(); }
@@ -469,18 +483,23 @@ class PRNG {
     }
 };
 
-inline u64 mul_hi64(u64 a, u64 b) {
-#if defined(__GNUC__) && defined(IS_64BIT)
-    __extension__ using uint128 = unsigned __int128;
-    return (uint128(a) * uint128(b)) >> 64;
+inline usize mul_hi64(u64 a, usize b) {
+#if defined(__GNUC__) && defined(IS_64BIT) && !defined(__wasm__)
+    return (u128(a) * u128(b)) >> 64;
 #else
     u64 aL = u32(a), aH = a >> 32;
-    u64 bL = u32(b), bH = b >> 32;
+    u64 bL = u32(b), bH = u64(b) >> 32;
     u64 c1 = (aL * bL) >> 32;
     u64 c2 = aH * bL + c1;
     u64 c3 = aL * bH + u32(c2);
     return aH * bH + (c2 >> 32) + (c3 >> 32);
 #endif
+}
+
+template<typename T1, typename T2>
+inline constexpr T2 interpolate(T1 x, T1 x0, T1 x1, T2 y0, T2 y1) {
+    assert(x0 != x1);
+    return T2(y0 + (y1 - y0) * (x - x0) / (x1 - x0));
 }
 
 u64 hash_bytes(const char*, usize);
@@ -490,8 +509,7 @@ inline usize get_raw_data_hash(const T& value) {
     // We must have no padding bytes because we're reinterpreting as char
     static_assert(std::has_unique_object_representations<T>());
 
-    return static_cast<usize>(
-      hash_bytes(reinterpret_cast<const char*>(&value), sizeof(value)));
+    return static_cast<usize>(hash_bytes(reinterpret_cast<const char*>(&value), sizeof(value)));
 }
 
 template<typename T>
@@ -508,88 +526,26 @@ inline void hash_combine(usize& seed, const T& v) {
 
 inline u64 hash_string(const std::string& sv) { return hash_bytes(sv.data(), sv.size()); }
 
-template<usize Capacity>
-class FixedString {
-   public:
-    FixedString() :
-        length_(0) {
-        data_[0] = '\0';
-    }
-
-    FixedString(const char* str) {
-        usize len = std::strlen(str);
-        if (len > Capacity)
-            std::terminate();
-        std::memcpy(data_, str, len);
-        length_        = len;
-        data_[length_] = '\0';
-    }
-
-    FixedString(const std::string& str) {
-        if (str.size() > Capacity)
-            std::terminate();
-        std::memcpy(data_, str.data(), str.size());
-        length_        = str.size();
-        data_[length_] = '\0';
-    }
-
-    usize size() const { return length_; }
-    usize capacity() const { return Capacity; }
-
-    const char* c_str() const { return data_; }
-    const char* data() const { return data_; }
-
-    char& operator[](usize i) { return data_[i]; }
-
-    const char& operator[](usize i) const { return data_[i]; }
-
-    FixedString& operator+=(const char* str) {
-        usize len = std::strlen(str);
-        if (length_ + len > Capacity)
-            std::terminate();
-        std::memcpy(data_ + length_, str, len);
-        length_ += len;
-        data_[length_] = '\0';
-        return *this;
-    }
-
-    FixedString& operator+=(const FixedString& other) { return (*this += other.c_str()); }
-
-    operator std::string() const { return std::string(data_, length_); }
-
-    operator std::string_view() const { return std::string_view(data_, length_); }
-
-    template<typename T>
-    bool operator==(const T& other) const noexcept {
-        return (std::string_view) (*this) == other;
-    }
-
-    template<typename T>
-    bool operator!=(const T& other) const noexcept {
-        return (std::string_view) (*this) != other;
-    }
-
-    void clear() {
-        length_  = 0;
-        data_[0] = '\0';
-    }
-
-   private:
-    char        data_[Capacity + 1];  // +1 for null terminator
-    usize length_;
-};
-
 struct CommandLine {
    public:
-    CommandLine(int _argc, char** _argv) :
-        argc(_argc),
-        argv(_argv) {}
+    CommandLine(int _argc, char** _argv);
 
-    static std::string get_binary_directory(std::string argv0);
-    static std::string get_working_directory();
+    CommandLine(const CommandLine&)            = delete;
+    CommandLine& operator=(const CommandLine&) = delete;
+    CommandLine(CommandLine&&)                 = default;
+    CommandLine& operator=(CommandLine&&)      = default;
+
+    static std::filesystem::path get_binary_directory(std::filesystem::path argv0);
+    static std::filesystem::path get_working_directory();
 
     int    argc;
     char** argv;
+
+   private:
+#ifdef _WIN32
+    std::vector<std::string> argv_storage;
+    std::vector<char*>       argv_utf8;
+#endif
 };
 
 namespace Utility {
@@ -604,6 +560,10 @@ void move_to_front(std::vector<T>& vec, Predicate pred) {
     }
 }
 }
+
+#ifndef __has_builtin
+    #define __has_builtin(x) 0
+#endif
 
 #if defined(__GNUC__)
     #define sf_always_inline __attribute__((always_inline))
@@ -642,21 +602,16 @@ void move_to_front(std::vector<T>& vec, Predicate pred) {
     #define sf_unreachable()
 #endif
 
-}  // namespace Stockfish
-
-template<std::size_t N>
-struct std::hash<Stockfish::FixedString<N>> {
-    std::size_t operator()(const Stockfish::FixedString<N>& fstr) const noexcept {
-        return Stockfish::hash_bytes(fstr.data(), fstr.size());
-    }
-};
-
-#if defined(__GNUC__) || defined(__clang__)
+#ifdef __GNUC__
     #define RESTRICT __restrict__
 #elif defined(_MSC_VER)
     #define RESTRICT __restrict
 #else
     #define RESTRICT
 #endif
+
+void set_console_utf8();
+
+}  // namespace Stockfish
 
 #endif  // #ifndef MISC_H_INCLUDED
