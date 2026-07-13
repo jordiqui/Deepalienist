@@ -49,10 +49,8 @@ namespace Stockfish::Eval::NNUE::Layers {
 #ifndef ENABLE_SEQ_OPT
 
 template<IndexType InputDimensions, IndexType PaddedInputDimensions, IndexType OutputDimensions>
-static void affine_transform_non_ssse3(i32*       output,
-                                       const i8*  weights,
-                                       const i32* biases,
-                                       const u8* input) {
+static void
+affine_transform_non_ssse3(i32* output, const i8* weights, const i32* biases, const u8* input) {
     #if defined(USE_SSE2) || defined(USE_NEON)
         #if defined(USE_SSE2)
     // At least a multiple of 16, with SSE2.
@@ -135,7 +133,7 @@ static void affine_transform_non_ssse3(i32*       output,
         if (input[i])
         {
             const i8* w  = &weights[i];
-            const int          in = input[i];
+            const int in = input[i];
             for (IndexType j = 0; j < OutputDimensions; ++j)
                 output[j] += w[j * PaddedInputDimensions] * in;
         }
@@ -221,10 +219,12 @@ class AffineTransform {
     #if defined(USE_AVX512)
             using vec_t = __m512i;
         #define vec_set_32 _mm512_set1_epi32
+        #define vec_add_32 _mm512_add_epi32
         #define vec_add_dpbusd_32 SIMD::m512_add_dpbusd_epi32
     #elif defined(USE_AVX2)
             using vec_t = __m256i;
         #define vec_set_32 _mm256_set1_epi32
+        #define vec_add_32 _mm256_add_epi32
         #define vec_add_dpbusd_32 SIMD::m256_add_dpbusd_epi32
     #elif defined(USE_SSSE3)
             using vec_t = __m128i;
@@ -253,26 +253,58 @@ class AffineTransform {
             static_assert(OutputDimensions % OutputSimdWidth == 0);
 
             constexpr IndexType NumChunks = ceil_to_multiple<IndexType>(InputDimensions, 8) / 4;
-            constexpr IndexType NumRegs   = OutputDimensions / OutputSimdWidth;
+            constexpr IndexType NumAccums = OutputDimensions / OutputSimdWidth;
+
+    #if defined(USE_VNNI) || defined(USE_NEON_DOTPROD)
+            constexpr IndexType NumRegs = 2 * NumAccums;
+    #else
+            constexpr IndexType NumRegs = NumAccums;
+    #endif
 
             const vec_t* biasvec = reinterpret_cast<const vec_t*>(biases);
             vec_t        acc[NumRegs];
-            for (IndexType k = 0; k < NumRegs; ++k)
+            for (IndexType k = 0; k < NumAccums; ++k)
                 acc[k] = biasvec[k];
+            for (IndexType k = NumAccums; k < NumRegs; ++k)
+                acc[k] = vec_set_32(0);
 
-            for (IndexType i = 0; i < NumChunks; ++i)
+            IndexType i = 0;
+    #if defined(USE_VNNI) || defined(USE_NEON_DOTPROD)
+            for (; i < NumChunks; i += 2)
             {
-                const vec_t in0 =
-                  vec_set_32(load_as<i32>(input + i * sizeof(i32)));
-                const auto col0 =
+                const vec_t in0 = vec_set_32(load_as<i32>(input + i * sizeof(i32)));
+                const vec_t in1 = vec_set_32(load_as<i32>(input + (i + 1) * sizeof(i32)));
+                const auto  col0 =
+                  reinterpret_cast<const vec_t*>(&weights[i * OutputDimensions * 4]);
+                const auto col1 =
+                  reinterpret_cast<const vec_t*>(&weights[(i + 1) * OutputDimensions * 4]);
+
+                for (IndexType k = 0; k < NumAccums; ++k)
+                {
+                    vec_add_dpbusd_32(acc[k], in0, col0[k]);
+                    vec_add_dpbusd_32(acc[k + NumAccums], in1, col1[k]);
+                }
+            }
+
+            for (IndexType k = 0; k < NumAccums; ++k)
+        #if defined(USE_NEON_DOTPROD)
+                acc[k] = vaddq_s32(acc[k], acc[k + NumAccums]);
+        #else
+                acc[k] = vec_add_32(acc[k], acc[k + NumAccums]);
+        #endif
+    #endif
+            for (; i < NumChunks; ++i)
+            {
+                const vec_t in0 = vec_set_32(load_as<i32>(input + i * sizeof(i32)));
+                const auto  col0 =
                   reinterpret_cast<const vec_t*>(&weights[i * OutputDimensions * 4]);
 
-                for (IndexType k = 0; k < NumRegs; ++k)
+                for (IndexType k = 0; k < NumAccums; ++k)
                     vec_add_dpbusd_32(acc[k], in0, col0[k]);
             }
 
             vec_t* outptr = reinterpret_cast<vec_t*>(output);
-            for (IndexType k = 0; k < NumRegs; ++k)
+            for (IndexType k = 0; k < NumAccums; ++k)
                 outptr[k] = acc[k];
 
     #undef vec_set_32

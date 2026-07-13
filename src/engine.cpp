@@ -94,7 +94,8 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
 
     options.add(  //
       "NumaPolicy", Option("auto", [this](const Option& o) {
-          set_numa_config_from_option(o);
+          if (!set_numa_config_from_option(o))
+              return "NumaPolicy: invalid value '" + std::string(o) + "', keeping previous config.";
           return numa_config_information_as_string() + "\n"
                + thread_allocation_information_as_string();
       }));
@@ -201,7 +202,8 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
     Experience::update_settings(options);
 }
 
-u64 Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
+std::variant<u64, PositionSetError>
+Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
     verify_networks();
 
     return Benchmark::perft(fen, depth, isChess960);
@@ -234,7 +236,7 @@ void Engine::search_clear() {
     tt.clear(threads);
     threads.clear();
 
-    // @TODO wont work with multiple instances
+    // TODO: does not work with multiple instances
     Tablebases::init(options["SyzygyPath"]);  // Free mapped files
 }
 
@@ -260,26 +262,30 @@ void Engine::set_on_verify_networks(std::function<void(std::string_view)>&& f) {
 
 void Engine::wait_for_search_finished() { threads.main_thread()->wait_for_search_finished(); }
 
-void Engine::set_position(const std::string& fen, const std::vector<std::string>& moves) {
+std::optional<PositionSetError> Engine::set_position(const std::string& fen, const std::vector<std::string>& moves) {
     // Drop the old state and create a new one
-    states = StateListPtr(new std::deque<StateInfo>(1));
-    pos.set(fen, options["UCI_Chess960"], &states->back());
+    states   = StateListPtr(new std::deque<StateInfo>(1));
+    auto err = pos.set(fen, options["UCI_Chess960"], &states->back());
+    if (err.has_value())
+        return err;
 
     for (const auto& move : moves)
     {
         auto m = UCIEngine::to_move(pos, move);
 
         if (m == Move::none())
-            break;
+            return PositionSetError("Illegal move: " + move);
 
         states->emplace_back();
         pos.do_move(m, states->back());
     }
+
+    return std::nullopt;
 }
 
 // modifiers
 
-void Engine::set_numa_config_from_option(const std::string& o) {
+bool Engine::set_numa_config_from_option(const std::string& o) {
     if (o == "auto" || o == "system")
     {
         numaContext.set_numa_config(NumaConfig::from_system(DefaultNumaPolicy));
@@ -295,12 +301,16 @@ void Engine::set_numa_config_from_option(const std::string& o) {
     }
     else
     {
-        numaContext.set_numa_config(NumaConfig::from_string(o));
+        auto parsed = NumaConfig::from_string(o);
+        if (!parsed.has_value())
+            return false;
+        numaContext.set_numa_config(std::move(*parsed));
     }
 
     // Force reallocation of threads in case affinities need to change.
     resize_threads();
     threads.ensure_network_replicated();
+    return true;
 }
 
 void Engine::resize_threads() {
@@ -395,7 +405,7 @@ OptionsMap&       Engine::get_options() { return options; }
 
 std::string Engine::fen() const { return pos.fen(); }
 
-void Engine::flip() { pos.flip(); }
+std::optional<PositionSetError> Engine::flip() { return pos.flip(); }
 
 std::string Engine::visualize() const {
     std::stringstream ss;

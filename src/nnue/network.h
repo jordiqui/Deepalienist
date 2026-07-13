@@ -110,7 +110,7 @@ class Network {
 };
 
 
-}  // namespace Stockfish
+}  // namespace Stockfish::Eval::NNUE
 
 template<>
 struct std::hash<Stockfish::Eval::NNUE::Network> {
