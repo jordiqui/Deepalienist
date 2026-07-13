@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <string>
@@ -32,6 +33,7 @@
 #include "history.h"
 #include "book/book_manager.h"
 #include "nnue/network.h"
+#include "nnue/nnue_misc.h"
 #include "numa.h"
 #include "position.h"
 #include "search.h"
@@ -48,7 +50,7 @@ class Engine {
     using InfoFull  = Search::InfoFull;
     using InfoIter  = Search::InfoIteration;
 
-    Engine(std::optional<std::string> path = std::nullopt);
+    Engine(std::optional<std::filesystem::path> path = std::nullopt);
 
     // Cannot be movable due to components holding backreferences to fields
     Engine(const Engine&)            = delete;
@@ -86,10 +88,10 @@ class Engine {
 
     // network related
 
-    void verify_networks() const;
-    void load_networks();
-    void load_big_network(const std::string& file);
-    void save_network(std::pair<std::optional<std::string>, std::string> file);
+    void                                 verify_networks() const;
+    std::unique_ptr<Eval::NNUE::Network> get_default_network();
+    void                                 load_network(const std::filesystem::path& file);
+    void save_network(const std::optional<std::filesystem::path>& file);
 
     // utility functions
 
@@ -110,18 +112,19 @@ class Engine {
     std::string                            thread_binding_information_as_string() const;
 
    private:
-    const std::string binaryDirectory;
+    const std::filesystem::path binaryDirectory;
 
     NumaReplicationContext numaContext;
 
     Position     pos;
     StateListPtr states;
 
-    OptionsMap                                         options;
-    ThreadPool                                         threads;
-    TranspositionTable                                 tt;
+    OptionsMap                                        options;
+    ThreadPool                                        threads;
+    TranspositionTable                                tt;
+    Eval::NNUE::EvalFile                              networkFile;
     LazyNumaReplicatedSystemWide<Eval::NNUE::Network> networks;
-    BookManager                                       bookManager;
+    BookManager                                      bookManager;
 
     Search::SearchManager::UpdateContext  updateContext;
     std::function<void(std::string_view)> onVerifyNetworks;
