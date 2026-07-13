@@ -39,7 +39,6 @@
     #include <cassert>
     #include <cstddef>
     #include <cstdint>
-    #include <cstring>
     #include <type_traits>
     #include "misc.h"
 
@@ -59,7 +58,7 @@
 // _WIN32                  Building on Windows (any)
 // _WIN64                  Building on Windows 64 bit
 
-// Enforce minimum GCC version
+    // Enforce minimum GCC version
     #if defined(__GNUC__) && !defined(__clang__) \
       && (__GNUC__ < 9 || (__GNUC__ == 9 && __GNUC_MINOR__ < 3))
         #error "Stockfish requires GCC 9.3 or later for correct compilation"
@@ -92,17 +91,6 @@
     #endif
 
 namespace Stockfish {
-
-// --- load_as: strict-aliasing safe typed load from byte pointer ---
-// Used by NNUE layer code paths.
-template<typename T>
-static inline T load_as(const void* p) {
-    static_assert(std::is_trivially_copyable_v<T>,
-                  "load_as requires trivially copyable type");
-    T v;
-    std::memcpy(&v, p, sizeof(T));
-    return v;
-}
 
     #ifdef USE_POPCNT
 constexpr bool HasPopCnt = true;
@@ -190,6 +178,22 @@ constexpr bool is_loss(Value value) {
 
 constexpr bool is_decisive(Value value) { return is_win(value) || is_loss(value); }
 
+constexpr bool is_mate(Value value) {
+    assert(is_valid(value));
+    return value >= VALUE_MATE_IN_MAX_PLY;
+}
+
+constexpr bool is_mated(Value value) {
+    assert(is_valid(value));
+    return value <= VALUE_MATED_IN_MAX_PLY;
+}
+
+constexpr bool is_mate_or_mated(Value value) { return is_mate(value) || is_mated(value); }
+
+constexpr Value mate_in(int ply) { return VALUE_MATE - ply; }
+
+constexpr Value mated_in(int ply) { return -VALUE_MATE + ply; }
+
 // In the code, we make the assumption that these values
 // are such that non_pawn_material() can be used to uniquely
 // identify the material on the board.
@@ -231,11 +235,12 @@ using Depth = int;
 constexpr Depth DEPTH_QS = 0;
 // For transposition table entries where no searching at all was done
 // (whether regular or qsearch) we use DEPTH_UNSEARCHED, which should thus
-// compare lower than any quiescence or regular depth. DEPTH_ENTRY_OFFSET
-// is used only for the transposition table entry occupancy check (see tt.cpp),
-// and should thus be lower than DEPTH_UNSEARCHED.
+// compare lower than any quiescence or regular depth. DEPTH_NONE is used
+// for the transposition table entry occupancy check (see tt.cpp), and
+// should thus be lower than DEPTH_UNSEARCHED.
 constexpr Depth DEPTH_UNSEARCHED   = -2;
 constexpr Depth DEPTH_ENTRY_OFFSET = -3;
+constexpr Depth DEPTH_NONE       = -3;
 
 // clang-format off
 enum Square : u8 {
@@ -322,7 +327,7 @@ struct DirtyThreat {
     Square threatened_sq() const { return static_cast<Square>(data >> ThreatenedSqOffset & 0xff); }
     Square pc_sq() const { return static_cast<Square>(data >> PcSqOffset & 0xff); }
     bool   add() const { return data >> 31; }
-    u32 raw() const { return data; }
+    u32    raw() const { return data; }
 
    private:
     u32 data;
@@ -339,7 +344,6 @@ using DirtyThreatList = ValueList<DirtyThreat, 96>;
 
 struct DirtyThreats {
     DirtyThreatList list;
-    Bitboard threatenedSqs, threateningSqs;
 };
 
     #define ENABLE_INCR_OPERATORS_ON(T) \
@@ -378,10 +382,6 @@ constexpr CastlingRights operator&(Color c, CastlingRights cr) {
     return CastlingRights((c == WHITE ? WHITE_CASTLING : BLACK_CASTLING) & cr);
 }
 
-constexpr Value mate_in(int ply) { return VALUE_MATE - ply; }
-
-constexpr Value mated_in(int ply) { return -VALUE_MATE + ply; }
-
 constexpr Square make_square(File f, Rank r) { return Square((r << 3) + f); }
 
 constexpr Piece make_piece(Color c, PieceType pt) { return Piece((c << 3) + pt); }
@@ -409,9 +409,7 @@ constexpr Direction pawn_push(Color c) { return c == WHITE ? NORTH : SOUTH; }
 
 
 // Based on a congruential pseudo-random number generator
-constexpr Key make_key(u64 seed) {
-    return seed * 6364136223846793005ULL + 1442695040888963407ULL;
-}
+constexpr Key make_key(u64 seed) { return seed * 6364136223846793005ULL + 1442695040888963407ULL; }
 
 
 enum MoveType : u16 {
@@ -476,6 +474,9 @@ class Move {
     struct MoveHash {
         usize operator()(const Move& m) const { return make_key(m.data); }
     };
+
+    static constexpr int FromSqShift = 6;
+    static constexpr int ToSqShift   = 0;
 
    protected:
     u16 data;

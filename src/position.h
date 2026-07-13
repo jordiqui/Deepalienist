@@ -25,6 +25,7 @@
 #include <iosfwd>
 #include <memory>
 #include <new>
+#include <stdexcept>
 #include <string>
 
 #include "attacks.h"
@@ -35,6 +36,12 @@ namespace Stockfish {
 
 class TranspositionTable;
 struct SharedHistories;
+
+// This error should be used whenever a position is suspected to be unsupported
+// by the engine. In particular positions that may cause hard errors like segmentation fault.
+struct PositionSetError: std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 // StateInfo struct stores information needed to restore a Position object to
 // its previous state when we retract a move. Whenever a move is made on the
@@ -84,9 +91,9 @@ class Position {
     Position& operator=(const Position&) = delete;
 
     // FEN string input/output
-    Position&   set(const std::string& fenStr, bool isChess960, StateInfo* si);
-    Position&   set(const std::string& code, Color c, StateInfo* si);
-    std::string fen() const;
+    std::optional<PositionSetError> set(const std::string& fenStr, bool isChess960, StateInfo* si);
+    std::optional<PositionSetError> set(const std::string& code, Color c, StateInfo* si);
+    std::string                     fen() const;
 
     // Position representation
     Bitboard pieces() const;  // All pieces
@@ -169,11 +176,12 @@ class Position {
     int   rule50_count() const;
     Value non_pawn_material(Color c) const;
     Value non_pawn_material() const;
+    bool  dtz_is_dtm() const;  // Pawnless && (3-men || 4-men-minors-only)
 
     // Position consistency check, for debugging
-    bool pos_is_ok() const;
-    bool material_key_is_ok() const;
-    void flip();
+    bool                            pos_is_ok() const;
+    bool                            material_key_is_ok() const;
+    std::optional<PositionSetError> flip();
 
     StateInfo* state() const;
 
@@ -334,6 +342,11 @@ inline int Position::game_ply() const { return gamePly; }
 inline int Position::rule50_count() const { return st->rule50; }
 
 inline bool Position::is_chess960() const { return chess960; }
+
+inline bool Position::dtz_is_dtm() const {
+    return !count<PAWN>()
+        && (count<ALL_PIECES>() == 3 || (count<ALL_PIECES>() == 4 && !pieces(QUEEN, ROOK)));
+}
 
 inline bool Position::capture(Move m) const {
     assert(m.is_ok());

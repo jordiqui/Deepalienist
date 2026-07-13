@@ -23,6 +23,7 @@
 #include <cassert>
 #include <cctype>
 #include <cstring>
+#include <cerrno>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -139,7 +140,7 @@ class Logger {
 //      Stockfish version
 std::string engine_version_info() {
     std::stringstream ss;
-    ss << "Stockfish " << version << std::setfill('0');
+    ss << "Deepalienist-5.0-300626 " << version << std::setfill('0');
 
     if constexpr (version == "dev")
     {
@@ -164,6 +165,9 @@ std::string engine_version_info() {
 #else
         ss << "nogit";
 #endif
+#ifdef GIT_DIFFINDEX
+        ss << "-m";
+#endif
     }
 
     return ss.str();
@@ -171,7 +175,7 @@ std::string engine_version_info() {
 
 std::string engine_info(bool to_uci) {
     return engine_version_info() + (to_uci ? "\nid author " : " by ")
-         + "the Stockfish developers (see AUTHORS file)";
+         + "Jordi Quiñonero (see AUTHORS file)";
 }
 
 
@@ -543,10 +547,14 @@ CommandLine::CommandLine(int _argc, char** _argv) :
 }
 
 
-usize str_to_size_t(const std::string& s) {
-    unsigned long long value = std::stoull(s);
-    if (value > std::numeric_limits<usize>::max())
-        std::exit(EXIT_FAILURE);
+std::optional<usize> str_to_size_t(const std::string& s) {
+    if (s.empty() || s[0] == '-')
+        return std::nullopt;
+    errno                           = 0;
+    char*                    endptr = nullptr;
+    const unsigned long long value  = std::strtoull(s.c_str(), &endptr, 10);
+    if (errno == ERANGE || *endptr != '\0' || value > std::numeric_limits<usize>::max())
+        return std::nullopt;
     return static_cast<usize>(value);
 }
 

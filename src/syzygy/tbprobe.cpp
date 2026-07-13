@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -29,13 +29,17 @@
 #include <initializer_list>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string_view>
+#include <filesystem>
 #include <sys/stat.h>
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <array>
 
+#include "../attacks.h"
 #include "../bitboard.h"
 #include "../misc.h"
 #include "../movegen.h"
@@ -55,6 +59,40 @@
     #endif
     #include <windows.h>
 #endif
+
+#ifdef NO_TABLEBASES
+
+// Stubbed out impls
+namespace Stockfish::Tablebases {
+
+int MaxCardinality;
+
+void init(const std::string&) {}
+
+WDLScore probe_wdl(Position&, ProbeState* result) {
+    *result = FAIL;
+    return WDLDraw;
+}
+
+int probe_dtz(Position&, ProbeState* result) {
+    *result = FAIL;
+    return 0;
+}
+
+bool root_probe(Position&, Search::RootMoves&, bool, bool, const std::function<bool()>&) {
+    return false;
+}
+
+bool root_probe_wdl(Position&, Search::RootMoves&, bool) { return false; }
+
+Config rank_root_moves(
+  const OptionsMap&, Position&, Search::RootMoves&, bool, const std::function<bool()>&) {
+    return Config{};
+}
+
+}  // namespace Stockfish::Tablebases
+
+#else
 
 using namespace Stockfish::Tablebases;
 
@@ -167,8 +205,8 @@ struct LR {
     };
 
     u8 lr[3];  // The first 12 bits is the left-hand symbol, the second 12
-                    // bits is the right-hand symbol. If the symbol has length 1,
-                    // then the left-hand symbol is the stored value.
+               // bits is the right-hand symbol. If the symbol has length 1,
+               // then the left-hand symbol is the stored value.
     template<Side S>
     Sym get() {
         return S == Left  ? ((lr[1] & 0xF) << 8) | lr[0]
@@ -190,7 +228,7 @@ static_assert(sizeof(LR) == 3, "LR tree entry must be 3 bytes");
 // time only existence of the file is checked.
 class TBFile: public std::ifstream {
 
-    std::string fname;
+    std::filesystem::path fname;
 
    public:
     // Look for and open the file among the Paths directories where the .rtbw
@@ -199,21 +237,13 @@ class TBFile: public std::ifstream {
     //
     // Example:
     // C:\tb\wdl345;C:\tb\wdl6;D:\tb\dtz345;D:\tb\dtz6
-    static std::string Paths;
+    static std::vector<std::filesystem::path> Paths;
 
     TBFile(const std::string& f) {
 
-#ifndef _WIN32
-        constexpr char SepChar = ':';
-#else
-        constexpr char SepChar = ';';
-#endif
-        std::stringstream ss(Paths);
-        std::string       path;
-
-        while (std::getline(ss, path, SepChar))
+        for (const auto& path : Paths)
         {
-            fname = path + "/" + f;
+            fname = path / std::filesystem::path(f);
             std::ifstream::open(fname);
             if (is_open())
                 return;
@@ -225,7 +255,7 @@ class TBFile: public std::ifstream {
         if (is_open())
             close();  // Need to re-open to get native file descriptor
 
-#ifndef _WIN32
+    #ifndef _WIN32
         struct stat statbuf;
         int         fd = ::open(fname.c_str(), O_RDONLY);
 
@@ -236,25 +266,25 @@ class TBFile: public std::ifstream {
 
         if (statbuf.st_size % 64 != 16)
         {
-            std::cerr << "Corrupt tablebase file " << fname << std::endl;
+            std::cerr << "Corrupt tablebase file " << fname.string() << std::endl;
             exit(EXIT_FAILURE);
         }
 
         *mapping     = statbuf.st_size;
         *baseAddress = mmap(nullptr, statbuf.st_size, PROT_READ, MAP_SHARED, fd, 0);
-    #if defined(MADV_RANDOM)
+        #if defined(MADV_RANDOM)
         madvise(*baseAddress, statbuf.st_size, MADV_RANDOM);
-    #endif
+        #endif
         ::close(fd);
 
         if (*baseAddress == MAP_FAILED)
         {
-            std::cerr << "Could not mmap() " << fname << std::endl;
+            std::cerr << "Could not mmap() " << fname.string() << std::endl;
             exit(EXIT_FAILURE);
         }
-#else
+    #else
         // Note FILE_FLAG_RANDOM_ACCESS is only a hint to Windows and as such may get ignored.
-        HANDLE fd = CreateFileA(fname.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+        HANDLE fd = CreateFileW(fname.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
                                 OPEN_EXISTING, FILE_FLAG_RANDOM_ACCESS, nullptr);
 
         if (fd == INVALID_HANDLE_VALUE)
@@ -265,7 +295,7 @@ class TBFile: public std::ifstream {
 
         if (size_low % 64 != 16)
         {
-            std::cerr << "Corrupt tablebase file " << fname << std::endl;
+            std::cerr << "Corrupt tablebase file " << fname.string() << std::endl;
             exit(EXIT_FAILURE);
         }
 
@@ -283,18 +313,18 @@ class TBFile: public std::ifstream {
 
         if (!*baseAddress)
         {
-            std::cerr << "MapViewOfFile() failed, name = " << fname
+            std::cerr << "MapViewOfFile() failed, name = " << fname.string()
                       << ", error = " << GetLastError() << std::endl;
             exit(EXIT_FAILURE);
         }
-#endif
+    #endif
         u8* data = (u8*) *baseAddress;
 
         constexpr u8 Magics[][4] = {{0xD7, 0x66, 0x0C, 0xA5}, {0x71, 0xE8, 0x23, 0x5D}};
 
         if (memcmp(data, Magics[type == WDL], 4))
         {
-            std::cerr << "Corrupted table in file " << fname << std::endl;
+            std::cerr << "Corrupted table in file " << fname.string() << std::endl;
             unmap(*baseAddress, *mapping);
             return *baseAddress = nullptr, nullptr;
         }
@@ -304,42 +334,41 @@ class TBFile: public std::ifstream {
 
     static void unmap(void* baseAddress, u64 mapping) {
 
-#ifndef _WIN32
+    #ifndef _WIN32
         munmap(baseAddress, mapping);
-#else
+    #else
         UnmapViewOfFile(baseAddress);
         CloseHandle((HANDLE) mapping);
-#endif
+    #endif
     }
 };
 
-std::string TBFile::Paths;
+std::vector<std::filesystem::path> TBFile::Paths;
 
 // struct PairsData contains low-level indexing information to access TB data.
 // There are 8, 4, or 2 PairsData records for each TBTable, according to the type
 // of table and if positions have pawns or not. It is populated at first access.
 struct PairsData {
-    u8   flags;            // Table flags, see enum TBFlag
-    u8   maxSymLen;        // Maximum length in bits of the Huffman symbols
-    u8   minSymLen;        // Minimum length in bits of the Huffman symbols
-    u32  blocksNum;        // Number of blocks in the TB file
-    usize    sizeofBlock;      // Block size in bytes
-    usize    span;             // About every span values there is a SparseIndex[] entry
-    Sym*      lowestSym;        // lowestSym[l] is the symbol of length l with the lowest value
-    LR*       btree;            // btree[sym] stores the left and right symbols that expand sym
-    u16* blockLength;      // Number of stored positions (minus one) for each block: 1..65536
-    u32  blockLengthSize;  // Size of blockLength[] table: padded so it's bigger than blocksNum
-    SparseEntry* sparseIndex;   // Partial indices into blockLength[]
-    usize       sparseIndexSize;  // Size of SparseIndex[] table
-    u8*     data;             // Start of Huffman compressed data
+    u8    flags;               // Table flags, see enum TBFlag
+    u8    maxSymLen;           // Maximum length in bits of the Huffman symbols
+    u8    minSymLen;           // Minimum length in bits of the Huffman symbols
+    u32   blocksNum;           // Number of blocks in the TB file
+    usize sizeofBlock;         // Block size in bytes
+    usize span;                // About every span values there is a SparseIndex[] entry
+    Sym*  lowestSym;           // lowestSym[l] is the symbol of length l with the lowest value
+    LR*   btree;               // btree[sym] stores the left and right symbols that expand sym
+    u16*  blockLength;         // Number of stored positions (minus one) for each block: 1..65536
+    u32   blockLengthSize;     // Size of blockLength[] table: padded so it's bigger than blocksNum
+    SparseEntry* sparseIndex;  // Partial indices into blockLength[]
+    usize        sparseIndexSize;  // Size of SparseIndex[] table
+    u8*          data;             // Start of Huffman compressed data
     std::vector<u64>
       base64;  // base64[l - min_sym_len] is the 64bit-padded lowest symbol of length l
-    std::vector<u8>
-             symlen;  // Number of values (-1) represented by a given Huffman symbol: 1..256
-    Piece    pieces[TBPIECES];        // Position pieces: the order of pieces defines the groups
-    u64 groupIdx[TBPIECES + 1];  // Start index used for the encoding of the group's pieces
-    int      groupLen[TBPIECES + 1];  // Number of pieces in a given group: KRKN -> (3, 1)
-    u16 map_idx[4];              // WDLWin, WDLLoss, WDLCursedWin, WDLBlessedLoss (used in DTZ)
+    std::vector<u8> symlen;  // Number of values (-1) represented by a given Huffman symbol: 1..256
+    Piece           pieces[TBPIECES];  // Position pieces: the order of pieces defines the groups
+    u64 groupIdx[TBPIECES + 1];        // Start index used for the encoding of the group's pieces
+    int groupLen[TBPIECES + 1];        // Number of pieces in a given group: KRKN -> (3, 1)
+    u16 map_idx[4];  // WDLWin, WDLLoss, WDLCursedWin, WDLBlessedLoss (used in DTZ)
 };
 
 // struct TBTable contains indexing information to access the corresponding TBFile.
@@ -354,14 +383,14 @@ struct TBTable {
 
     std::atomic_bool ready;
     void*            baseAddress;
-    u8*         map;
-    u64         mapping;
+    u8*              map;
+    u64              mapping;
     Key              key;
     Key              key2;
     int              pieceCount;
     bool             hasPawns;
     bool             hasUniquePieces;
-    u8          pawnCount[2];     // [Lead color / other color]
+    u8               pawnCount[2];     // [Lead color / other color]
     PairsData        items[Sides][4];  // [wtm / btm][FILE_A..FILE_D or 0]
 
     PairsData* get(int stm, int f) { return &items[stm % Sides][hasPawns ? f : 0]; }
@@ -385,7 +414,16 @@ TBTable<WDL>::TBTable(const std::string& code) :
     StateInfo st;
     Position  pos;
 
-    key        = pos.set(code, WHITE, &st).material_key();
+    auto err = pos.set(code, WHITE, &st);
+    // IMPORTANT: We cannot assert here because it WILL produce validation errors
+    // on some TB7 and higher positions due to the black king being attacked
+    // while white is to move. This is not fixable without significant changes.
+    // As using pos.set here is already a very hacky way to achieve the desired
+    // result here so we leave it for now. The validation checks that fail are
+    // done after the position is fully set up, so it's fine for now.
+    // assert(!err.has_value());
+    (void) err;
+    key        = pos.material_key();
     pieceCount = pos.count<ALL_PIECES>();
     hasPawns   = pos.pieces(PAWN);
 
@@ -403,7 +441,16 @@ TBTable<WDL>::TBTable(const std::string& code) :
     pawnCount[0] = pos.count<PAWN>(c ? WHITE : BLACK);
     pawnCount[1] = pos.count<PAWN>(c ? BLACK : WHITE);
 
-    key2 = pos.set(code, BLACK, &st).material_key();
+    err = pos.set(code, BLACK, &st);
+    // IMPORTANT: We cannot assert here because it WILL produce validation errors
+    // on some TB7 and higher positions due to the black king being attacked
+    // while white is to move. This is not fixable without significant changes.
+    // As using pos.set here is already a very hacky way to achieve the desired
+    // result here so we leave it for now. The validation checks that fail are
+    // done after the position is fully set up, so it's fine for now.
+    // assert(!err.has_value());
+    (void) err;
+    key2 = pos.material_key();
 }
 
 template<>
@@ -443,12 +490,12 @@ class TBTables {
 
     std::deque<TBTable<WDL>> wdlTable;
     std::deque<TBTable<DTZ>> dtzTable;
-    usize                   foundDTZFiles = 0;
-    usize                   foundWDLFiles = 0;
+    usize                    foundDTZFiles = 0;
+    usize                    foundWDLFiles = 0;
 
     void insert(Key key, TBTable<WDL>* wdl, TBTable<DTZ>* dtz) {
-        u32 homeBucket = u32(key) & (Size - 1);
-        Entry    entry{key, wdl, dtz};
+        u32   homeBucket = u32(key) & (Size - 1);
+        Entry entry{key, wdl, dtz};
 
         // Ensure last element is empty to avoid overflow when looking up
         for (u32 bucket = homeBucket; bucket < Size + Overflow - 1; ++bucket)
@@ -577,14 +624,14 @@ int decompress_pairs(PairsData* d, u64 idx) {
 
     // Then we read the corresponding SparseIndex[] entry
     u32 block  = number<u32, LittleEndian>(&d->sparseIndex[k].block);
-    int      offset = number<u16, LittleEndian>(&d->sparseIndex[k].offset);
+    int offset = number<u16, LittleEndian>(&d->sparseIndex[k].offset);
 
     // Now compute the difference idx - I(k). From the definition of k, we know that
     //
     //       idx = k * d->span + idx % d->span    (2)
     //
     // So from (1) and (2) we can compute idx - I(K):
-    int diff = idx % d->span - d->span / 2;
+    int diff = int(idx % d->span - d->span / 2);
 
     // Sum the above to offset to find the offset corresponding to our idx
     offset += diff;
@@ -708,16 +755,12 @@ int map_score(TBTable<DTZ>* entry, File f, int value, WDLScore wdl) {
     return value + 1;
 }
 
-// A temporary fix for the compiler bug with AVX-512. (#4450)
-#ifdef USE_AVX512
+    // A temporary fix for the compiler bug with vectorization. (#4450)
     #if defined(__clang__) && defined(__clang_major__) && __clang_major__ >= 15
-        #define CLANG_AVX512_BUG_FIX __attribute__((optnone))
+        #define DISABLE_CLANG_LOOP_VEC _Pragma("clang loop vectorize(disable)")
+    #else
+        #define DISABLE_CLANG_LOOP_VEC
     #endif
-#endif
-
-#ifndef CLANG_AVX512_BUG_FIX
-    #define CLANG_AVX512_BUG_FIX
-#endif
 
 // Compute a unique index out of a position and use it to probe the TB file. To
 // encode k pieces of the same type and color, first sort the pieces by square in
@@ -726,12 +769,11 @@ int map_score(TBTable<DTZ>* entry, File f, int value, WDLScore wdl) {
 //      idx = Binomial[1][s1] + Binomial[2][s2] + ... + Binomial[k][sk]
 //
 template<typename T, typename Ret = typename T::Ret>
-CLANG_AVX512_BUG_FIX Ret
-do_probe_table(const Position& pos, T* entry, WDLScore wdl, ProbeState* result) {
+Ret do_probe_table(const Position& pos, T* entry, WDLScore wdl, ProbeState* result) {
 
     Square     squares[TBPIECES];
     Piece      pieces[TBPIECES];
-    u64   idx;
+    u64        idx;
     int        next = 0, size = 0, leadPawnsCnt = 0;
     PairsData* d;
     Bitboard   b, leadPawns = 0;
@@ -811,8 +853,11 @@ do_probe_table(const Position& pos, T* entry, WDLScore wdl, ProbeState* result) 
     // Now we map again the squares so that the square of the lead piece is in
     // the triangle A1-D1-D4.
     if (file_of(squares[0]) > FILE_D)
+    {
+        DISABLE_CLANG_LOOP_VEC
         for (int i = 0; i < size; ++i)
             squares[i] = flip_file(squares[i]);
+    }
 
     // Encode leading pawns starting with the one with minimum MapPawns[] and
     // proceeding in ascending order.
@@ -831,19 +876,26 @@ do_probe_table(const Position& pos, T* entry, WDLScore wdl, ProbeState* result) 
     // In positions without pawns, we further flip the squares to ensure leading
     // piece is below RANK_5.
     if (rank_of(squares[0]) > RANK_4)
+    {
+        DISABLE_CLANG_LOOP_VEC
         for (int i = 0; i < size; ++i)
             squares[i] = flip_rank(squares[i]);
+    }
 
     // Look for the first piece of the leading group not on the A1-D4 diagonal
     // and ensure it is mapped below the diagonal.
+    DISABLE_CLANG_LOOP_VEC
     for (int i = 0; i < d->groupLen[0]; ++i)
     {
         if (!off_A1H8(squares[i]))
             continue;
 
         if (off_A1H8(squares[i]) > 0)  // A1-H8 diagonal flip: SQ_A3 -> SQ_C1
+        {
+            DISABLE_CLANG_LOOP_VEC
             for (int j = i; j < size; ++j)
                 squares[j] = Square(((squares[j] >> 3) | (squares[j] << 3)) & 63);
+        }
         break;
     }
 
@@ -924,8 +976,10 @@ encode_remaining:
         // groups (similar to what was done earlier for leading group pieces).
         for (int i = 0; i < d->groupLen[next]; ++i)
         {
-            auto f      = [&](Square s) { return groupSq[i] > s; };
-            auto adjust = std::count_if(squares, groupSq, f);
+            int adjust = 0;
+            DISABLE_CLANG_LOOP_VEC
+            for (Square* sq = squares; sq != groupSq; ++sq)
+                adjust += groupSq[i] > *sq;
             n += Binomial[i + 1][groupSq[i] - adjust - 8 * remainingPawns];
         }
 
@@ -975,10 +1029,10 @@ void set_groups(T& e, PairsData* d, int order[], File f) {
     // pawns/pieces -> remaining pawns -> remaining pieces. In particular the
     // first group is at order[0] position and the remaining pawns, when present,
     // are at order[1] position.
-    bool     pp          = e.hasPawns && e.pawnCount[1];  // Pawns on both sides
-    int      next        = pp ? 2 : 1;
-    int      freeSquares = 64 - d->groupLen[0] - (pp ? d->groupLen[1] : 0);
-    u64 idx         = 1;
+    bool pp          = e.hasPawns && e.pawnCount[1];  // Pawns on both sides
+    int  next        = pp ? 2 : 1;
+    int  freeSquares = 64 - d->groupLen[0] - (pp ? d->groupLen[1] : 0);
+    u64  idx         = 1;
 
     for (int k = 0; next < n || k == order[0] || k == order[1]; ++k)
         if (k == order[0])  // Leading pawns or pieces
@@ -1059,7 +1113,7 @@ u8* set_sizes(PairsData* d, u8* data) {
     // Starting from this we compute a base64[] table indexed by symbol length
     // and containing 64 bit values so that d->base64[i] >= d->base64[i+1].
 
-    // Implementation note: we first cast the unsigned usize "base64.size()"
+    // Implementation note: we first cast the unsigned size_t "base64.size()"
     // to a signed int "base64_size" variable and then we are able to subtract 2,
     // avoiding unsigned overflow warnings.
 
@@ -1092,7 +1146,7 @@ u8* set_sizes(PairsData* d, u8* data) {
     // See https://web.archive.org/web/20201106232444/http://www.larsson.dogma.net/dcc99.pdf
     std::vector<bool> visited(d->symlen.size());
 
-    for (usize sym = 0; sym < d->symlen.size(); ++sym)
+    for (Sym sym = 0; sym < d->symlen.size(); ++sym)
         if (!visited[sym])
             d->symlen[sym] = set_symlen(d, sym, visited);
 
@@ -1214,6 +1268,8 @@ template<TBType Type>
 void* mapped(TBTable<Type>& e, const Position& pos) {
 
     static std::mutex mutex;
+    // Because TB is the only usage of materialKey, check it here in debug mode
+    assert(pos.material_key_is_ok());
 
     // Use 'acquire' to avoid a thread reading 'ready' == true while
     // another is still working. (compiler reordering may cause this).
@@ -1278,7 +1334,7 @@ WDLScore search(Position& pos, ProbeState* result) {
     WDLScore  value, bestValue = WDLLoss;
     StateInfo st;
 
-    auto   moveList   = MoveList<LEGAL>(pos);
+    auto  moveList   = MoveList<LEGAL>(pos);
     usize totalCount = moveList.size(), moveCount = 0;
 
     for (const Move move : moveList)
@@ -1342,9 +1398,24 @@ void Tablebases::init(const std::string& paths) {
 
     TBTables.clear();
     MaxCardinality = 0;
-    TBFile::Paths  = paths;
+    TBFile::Paths.clear();
 
-    if (paths.empty())
+    if (!paths.empty())
+    {
+    #ifndef _WIN32
+        constexpr char SepChar = ':';
+    #else
+        constexpr char SepChar = ';';
+    #endif
+
+        std::stringstream ss(paths);
+        std::string       path;
+        while (std::getline(ss, path, SepChar))
+            if (!path.empty())
+                TBFile::Paths.emplace_back(path_from_utf8(path));
+    }
+
+    if (TBFile::Paths.empty())
         return;
 
     // MapB1H1H7[] encodes a square below a1-h8 diagonal to 0..27
@@ -1377,7 +1448,7 @@ void Tablebases::init(const std::string& paths) {
             if (MapA1D1D4[s1] == idx && (idx || s1 == SQ_B1))  // SQ_B1 is mapped to 0
             {
                 for (Square s2 = SQ_A1; s2 <= SQ_H8; ++s2)
-                    if ((PseudoAttacks[KING][s1] | s1) & s2)
+                    if ((Attacks::PseudoAttacks[KING][s1] | s1) & s2)
                         continue;  // Illegal position
 
                     else if (!off_A1H8(s1) && off_A1H8(s2) > 0)
@@ -1592,10 +1663,11 @@ int Tablebases::probe_dtz(Position& pos, ProbeState* result) {
 // Use the DTZ tables to rank root moves.
 //
 // A return value false indicates that not all probes were successful.
-bool Tablebases::root_probe(Position&          pos,
-                            Search::RootMoves& rootMoves,
-                            bool               rule50,
-                            bool               rankDTZ) {
+bool Tablebases::root_probe(Position&                    pos,
+                            Search::RootMoves&           rootMoves,
+                            bool                         rule50,
+                            bool                         rankDTZ,
+                            const std::function<bool()>& time_abort) {
 
     ProbeState result = OK;
     StateInfo  st;
@@ -1640,7 +1712,7 @@ bool Tablebases::root_probe(Position&          pos,
 
         pos.undo_move(m.pv[0]);
 
-        if (result == FAIL)
+        if (time_abort() || result == FAIL)
             return false;
 
         // Better moves are ranked higher. Certain wins are ranked equally.
@@ -1705,10 +1777,11 @@ bool Tablebases::root_probe_wdl(Position& pos, Search::RootMoves& rootMoves, boo
     return true;
 }
 
-Config Tablebases::rank_root_moves(const OptionsMap&  options,
-                                   Position&          pos,
-                                   Search::RootMoves& rootMoves,
-                                   bool               rankDTZ) {
+Config Tablebases::rank_root_moves(const OptionsMap&            options,
+                                   Position&                    pos,
+                                   Search::RootMoves&           rootMoves,
+                                   bool                         rankDTZ,
+                                   const std::function<bool()>& time_abort) {
     Config config;
 
     if (rootMoves.empty())
@@ -1729,12 +1802,16 @@ Config Tablebases::rank_root_moves(const OptionsMap&  options,
         config.probeDepth  = 0;
     }
 
-    if (config.cardinality >= popcount(pos.pieces()) && !pos.can_castle(ANY_CASTLING))
+    if (config.cardinality >= pos.count<ALL_PIECES>() && !pos.can_castle(ANY_CASTLING))
     {
-        // Rank moves using DTZ tables
-        config.rootInTB = root_probe(pos, rootMoves, options["Syzygy50MoveRule"], rankDTZ);
+        // Use DTZ to rank the moves if checkmate is the only zeroing move
+        rankDTZ = rankDTZ || pos.dtz_is_dtm();
 
-        if (!config.rootInTB)
+        // Rank moves using DTZ tables, bail out if time_abort flags zeitnot
+        config.rootInTB =
+          root_probe(pos, rootMoves, options["Syzygy50MoveRule"], rankDTZ, time_abort);
+
+        if (!config.rootInTB && !time_abort())
         {
             // DTZ tables are missing; try to rank moves using WDL tables
             dtz_available   = false;
@@ -1763,3 +1840,5 @@ Config Tablebases::rank_root_moves(const OptionsMap&  options,
     return config;
 }
 }  // namespace Stockfish
+
+#endif  // NO_TABLEBASES

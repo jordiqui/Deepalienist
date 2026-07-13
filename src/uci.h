@@ -50,7 +50,7 @@ class UCIEngine {
     static std::string to_lower(std::string str);
     static Move        to_move(const Position& pos, std::string str);
 
-    static Search::LimitsType parse_limits(std::istream& is);
+    Search::LimitsType parse_limits(std::istream& is);
 
     auto& engine_options() { return engine.get_options(); }
 
@@ -59,6 +59,7 @@ class UCIEngine {
     CommandLine cli;
     bool        suppressNonEssentialInfo = false;
     TimePoint   lastInfoEmissionTimeMs   = 0;
+    std::string currentCmd;
 
     static void print_info_string(std::string_view str);
     static bool should_suppress_non_essential_info(const Search::LimitsType& limits);
@@ -76,6 +77,9 @@ class UCIEngine {
     void on_bestmove(std::string_view bestmove, std::string_view ponder);
 
     void init_search_update_listeners();
+
+
+    [[noreturn]] void terminate_on_critical_error(const std::string& message);
 };
 
 }  // namespace Stockfish
