@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,14 +20,16 @@
 #define MEMORY_H_INCLUDED
 
 #include <algorithm>
-#include <cstddef>
+#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <new>
 #include <type_traits>
 #include <utility>
+#include <cstring>
 
 #include "types.h"
+#include "misc.h"
 
 #if defined(_WIN64)
 
@@ -40,6 +42,13 @@
         #define NOMINMAX
     #endif
     #include <windows.h>
+
+    // Some Windows headers (RPC/old headers) define short macros such
+    // as 'small' expanding to 'char', which breaks identifiers in the code.
+    // Undefine those macros immediately after including <windows.h>.
+    #ifdef small
+        #undef small
+    #endif
 
     #include <psapi.h>
 
@@ -54,10 +63,13 @@ using AdjustTokenPrivileges_t =
 
 namespace Stockfish {
 
+constexpr usize HugePageSize = usize(1) << 30;
+
 void* std_aligned_alloc(usize alignment, usize size);
 void  std_aligned_free(void* ptr);
 
 // Memory aligned by page size, min alignment: 4096 bytes
+void* aligned_large_pages_alloc_with_hint(usize size, bool hugePageHint);
 void* aligned_large_pages_alloc(usize size);
 void  aligned_large_pages_free(void* mem);
 
@@ -87,7 +99,7 @@ void memory_deleter_array(T* ptr, FREE_FUNC free_func) {
 
     // Move back on the pointer to where the size is allocated
     const usize array_offset = std::max(sizeof(usize), alignof(T));
-    char*        raw_memory   = reinterpret_cast<char*>(ptr) - array_offset;
+    char*       raw_memory   = reinterpret_cast<char*>(ptr) - array_offset;
 
     if constexpr (!std::is_trivially_destructible_v<T>)
     {
@@ -309,6 +321,25 @@ auto windows_try_with_large_page_priviliges([[maybe_unused]] FuncYesT&& fyes, Fu
 }
 
 #endif
+
+template<typename T, typename ByteT>
+T load_as(const ByteT* buffer) {
+    static_assert(std::is_trivially_copyable<T>::value, "Type must be trivially copyable");
+    static_assert(sizeof(ByteT) == 1);
+
+    if (reinterpret_cast<uintptr_t>(buffer) % alignof(T) != 0)
+    {
+        assert(false);
+#ifdef __GNUC__
+        __builtin_unreachable();
+#endif
+    }
+
+    T value;
+    std::memcpy(&value, buffer, sizeof(T));
+
+    return value;
+}
 
 }  // namespace Stockfish
 

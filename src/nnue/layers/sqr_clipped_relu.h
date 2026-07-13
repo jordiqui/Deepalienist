@@ -26,6 +26,7 @@
 #include <iosfwd>
 
 #include "../nnue_common.h"
+#include "../simd.h"
 
 namespace Stockfish::Eval::NNUE::Layers {
 
@@ -76,9 +77,8 @@ class SqrClippedReLU {
 
 #if defined(USE_SSE2)
         constexpr IndexType NumChunks = InputDimensions / 16;
-
-        const auto in  = reinterpret_cast<const __m128i*>(input);
-        const auto out = reinterpret_cast<__m128i*>(output);
+        const auto          in        = reinterpret_cast<const __m128i*>(input);
+        const auto          out       = reinterpret_cast<__m128i*>(output);
         for (IndexType i = 0; i < NumChunks; ++i)
         {
             __m128i words0 =
@@ -103,7 +103,8 @@ class SqrClippedReLU {
             const __m256i words1 = __lasx_xvssrani_h_w(in[i * 4 + 3], in[i * 4 + 2], 0);
             const __m256i sqr0   = __lasx_xvmuh_h(words0, words0);
             const __m256i sqr1   = __lasx_xvmuh_h(words1, words1);
-            const __m256i packed = __lasx_xvssrlni_b_h(sqr1, sqr0, SimdShiftAmount);
+            __m256i       packed;
+            packed               = __lasx_xvssrlni_b_h(sqr1, sqr0, SimdShiftAmount);
             const __m256i permed = __lasx_xvpermi_d(packed, 0xD8);
             __lasx_xvst(__lasx_xvshuf4i_w(permed, 0xD8), out + i, 0);
         }
@@ -122,6 +123,41 @@ class SqrClippedReLU {
             out[i]               = __lsx_vssrlni_b_h(sqr1, sqr0, SimdShiftAmount);
         }
         constexpr IndexType Start = NumChunks * 16;
+
+#elif defined(USE_NEON)
+        constexpr IndexType NumChunks = InputDimensions / 16;
+        const auto          in        = reinterpret_cast<const int32x4_t*>(input);
+        const auto          out       = reinterpret_cast<int8x16_t*>(output);
+        for (IndexType i = 0; i < NumChunks; ++i)
+        {
+            const int16x8_t words0 =
+              vcombine_s16(vqmovn_s32(in[i * 4 + 0]), vqmovn_s32(in[i * 4 + 1]));
+            const int16x8_t words1 =
+              vcombine_s16(vqmovn_s32(in[i * 4 + 2]), vqmovn_s32(in[i * 4 + 3]));
+            // Neon needs to shift by one more since the used simd instruction does
+            // `Saturating Doubling Multiply High` (doubling before shift by 16).
+            const int16x8_t r0 = vshrq_n_s16(vqdmulhq_s16(words0, words0), SimdShiftAmount + 1);
+            const int16x8_t r1 = vshrq_n_s16(vqdmulhq_s16(words1, words1), SimdShiftAmount + 1);
+
+            out[i] = vcombine_s8(vqmovn_s16(r0), vqmovn_s16(r1));
+        }
+        constexpr IndexType Start = NumChunks * 16;
+
+#elif defined(USE_RVV)
+
+        for (usize j = 0; j < InputDimensions;)
+        {
+            usize      vl = __riscv_vsetvl_e32m4(InputDimensions - j);
+            vint32m4_t in = __riscv_vle32_v_i32m4(&input[j], vl);
+
+            vint16m2_t words   = __riscv_vnclip_wx_i16m2(in, 0, __RISCV_VXRM_RDN, vl);
+            vint16m2_t sqr     = __riscv_vmulh_vv_i16m2(words, words, vl);
+            vint8m1_t narrowed = __riscv_vnclip_wx_i8m1(sqr, SimdShiftAmount, __RISCV_VXRM_RDN, vl);
+
+            __riscv_vse8_v_u8m1(&output[j], __riscv_vreinterpret_v_i8m1_u8m1(narrowed), vl);
+            j += vl;
+        }
+        constexpr IndexType Start = InputDimensions;
 
 #else
         constexpr IndexType Start = 0;

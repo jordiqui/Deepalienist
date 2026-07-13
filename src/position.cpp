@@ -1056,6 +1056,10 @@ inline void add_dirty_threat(
     dts->list.push_back({pc, threatened, s, threatenedSq, PutPiece});
 }
 
+constexpr bool can_slider_threat(Piece pc, Piece slider) {
+    return type_of(pc) != QUEEN || type_of(slider) == QUEEN;
+}
+
 #ifdef USE_AVX512ICL
 // Given a DirtyThreat template and bit offsets to insert the piece type and square, write the threats
 // present at the given bitboard.
@@ -1105,20 +1109,21 @@ void Position::update_piece_threats(Piece                     pc,
     const Bitboard rookQueens   = pieces(ROOK, QUEEN);
     const Bitboard bishopQueens = pieces(BISHOP, QUEEN);
     const Bitboard knights      = pieces(KNIGHT);
-    const Bitboard kings        = pieces(KING);
+    const Bitboard occupiedNoK  = occupied ^ pieces(KING);
     const Bitboard whitePawns   = pieces(WHITE, PAWN);
     const Bitboard blackPawns   = pieces(BLACK, PAWN);
 
     const Bitboard rAttacks = attacks_bb<ROOK>(s, occupied);
     const Bitboard bAttacks = attacks_bb<BISHOP>(s, occupied);
 
-    Bitboard threatened = attacks_bb(pc, s, occupied) & occupied;
-    Bitboard sliders    = (rookQueens & rAttacks) | (bishopQueens & bAttacks);
-    Bitboard incoming_threats =
-      (PseudoAttacks[KNIGHT][s] & knights) | (PseudoAttacks[KING][s] & kings);
+    Bitboard threatened       = attacks_bb(pc, s, occupied) & occupiedNoK;
+    Bitboard sliders          = (rookQueens & rAttacks) | (bishopQueens & bAttacks);
+    Bitboard directSliders    = type_of(pc) == QUEEN ? sliders & pieces(QUEEN) : sliders;
+    Bitboard incoming_threats = PseudoAttacks[KNIGHT][s] & knights;
 
     // Compute both incoming and outgoing pawn threats. Incoming pawn pushers are only
     // added if 'pc' is a pawn.
+    Bitboard pawnThreats = 0;
     if (type_of(pc) == PAWN)
     {
         Bitboard whiteAttacks = PawnPushOrAttacks[WHITE][s];
@@ -1126,13 +1131,30 @@ void Position::update_piece_threats(Piece                     pc,
 
         threatened |= (color_of(pc) == WHITE ? whiteAttacks : blackAttacks) & pieces(PAWN);
 
-        incoming_threats |= whiteAttacks & blackPawns;
-        incoming_threats |= blackAttacks & whitePawns;
+        pawnThreats = whiteAttacks & blackPawns;
+        pawnThreats |= blackAttacks & whitePawns;
     }
     else
     {
-        incoming_threats |=
+        pawnThreats =
           (attacks_bb<PAWN>(s, WHITE) & blackPawns) | (attacks_bb<PAWN>(s, BLACK) & whitePawns);
+    }
+
+    if (type_of(pc) == PAWN || type_of(pc) == KNIGHT || type_of(pc) == ROOK)
+        incoming_threats |= pawnThreats;
+
+    switch (type_of(pc))
+    {
+    case PAWN :
+        threatened &= pieces(PAWN, KNIGHT, ROOK);
+        break;
+    case BISHOP :
+    case ROOK :
+        threatened &= pieces(PAWN, KNIGHT, BISHOP, ROOK);
+        break;
+    default :
+        threatened &= occupiedNoK;
+        break;
     }
 
 #ifdef USE_AVX512ICL
@@ -1149,7 +1171,7 @@ void Position::update_piece_threats(Piece                     pc,
           *this, threatened, dt_template, dts);
     }
 
-    Bitboard all_attackers = sliders | incoming_threats;
+    Bitboard all_attackers = directSliders | incoming_threats;
     if (!all_attackers)
         return;  // Square s is threatened iff there's at least one attacker
 
@@ -1183,24 +1205,26 @@ void Position::update_piece_threats(Piece                     pc,
             Piece  slider   = piece_on(sliderSq);
 
             const Bitboard ray        = ray_pass_bb(sliderSq, s);
-            const Bitboard discovered = ray & (rAttacks | bAttacks) & occupied;
+            const Bitboard discovered = ray & (rAttacks | bAttacks) & occupiedNoK;
 
             assert(!more_than_one(discovered));
             if (discovered && (ray & noRaysContaining) != noRaysContaining)
             {
                 const Square threatenedSq = lsb(discovered);
                 const Piece  threatenedPc = piece_on(threatenedSq);
-                add_dirty_threat<!PutPiece>(dts, slider, threatenedPc, sliderSq, threatenedSq);
+                if (can_slider_threat(threatenedPc, slider))
+                    add_dirty_threat<!PutPiece>(dts, slider, threatenedPc, sliderSq, threatenedSq);
             }
 
 #ifndef USE_AVX512ICL  // for ICL, direct threats were processed earlier (all_attackers)
-            add_dirty_threat<PutPiece>(dts, slider, pc, sliderSq, s);
+            if (can_slider_threat(pc, slider))
+                add_dirty_threat<PutPiece>(dts, slider, pc, sliderSq, s);
 #endif
         }
     }
     else
     {
-        incoming_threats |= sliders;
+        incoming_threats |= directSliders;
     }
 
 #ifndef USE_AVX512ICL
