@@ -25,7 +25,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <utility>
 
 #include "../types.h"
 #include "nnue_architecture.h"
@@ -90,10 +89,7 @@ struct AccumulatorCaches {
 };
 
 
-struct AccumulatorState: public Accumulator {
-    DirtyPiece   dirtyPiece;
-    DirtyThreats dirtyThreats;
-};
+struct AccumulatorState: public Accumulator, Dirties {};
 
 class AccumulatorStack {
    public:
@@ -101,9 +97,9 @@ class AccumulatorStack {
 
     [[nodiscard]] const AccumulatorState& latest() const noexcept;
 
-    void                                  reset() noexcept;
-    std::pair<DirtyPiece&, DirtyThreats&> push() noexcept;
-    void                                  pop() noexcept;
+    void     reset() noexcept;
+    Dirties& push() noexcept;
+    void     pop() noexcept;
 
     void evaluate(const Position&           pos,
                   const FeatureTransformer& featureTransformer,
