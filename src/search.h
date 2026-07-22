@@ -62,6 +62,7 @@ namespace Search {
 // shallower and deeper in the tree during the search. Each search thread has
 // its own array of Stack objects, indexed by the current ply.
 struct Stack {
+    bool followPV;
     Move*                       pv;
     PieceToHistory*             continuationHistory;
     CorrectionHistory<PieceTo>* continuationCorrectionHistory;
@@ -343,6 +344,7 @@ class Worker {
     Position  rootPos;
     StateInfo rootState;
     RootMoves rootMoves;
+    std::vector<Move> lastIterationPV;
     Depth     rootDepth, completedDepth;
     Value     rootDelta;
 
