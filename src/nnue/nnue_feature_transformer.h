@@ -38,8 +38,7 @@ namespace Stockfish::Eval::NNUE {
 
 // Returns the inverse of a permutation
 template<usize Len>
-constexpr std::array<usize, Len>
-invert_permutation(const std::array<usize, Len>& order) {
+constexpr std::array<usize, Len> invert_permutation(const std::array<usize, Len>& order) {
     std::array<usize, Len> inverse{};
     for (usize i = 0; i < order.size(); i++)
         inverse[order[i]] = i;
@@ -88,7 +87,9 @@ class FeatureTransformer {
 
     // Number of input/output dimensions
     static constexpr IndexType ThreatInputDimensions = ThreatFeatureSet::Dimensions;
-    static constexpr IndexType InputDimensions  = PSQFeatureSet::Dimensions + ThreatInputDimensions;
+    static constexpr IndexType PairInputDimensions   = PairFeatureSet::Dimensions;
+    static constexpr IndexType InputDimensions =
+      PSQFeatureSet::Dimensions + ThreatInputDimensions + PairInputDimensions;
     static constexpr IndexType OutputDimensions = HalfDimensions;
 
     // Size of forward propagation buffer
@@ -129,7 +130,8 @@ class FeatureTransformer {
 
     // Hash value embedded in the evaluation file
     static constexpr u32 get_hash_value() {
-        return combine_hash({ThreatFeatureSet::HashValue, PSQFeatureSet::HashValue})
+        return combine_hash(
+                 {ThreatFeatureSet::HashValue, PairFeatureSet::HashValue, PSQFeatureSet::HashValue})
              ^ (OutputDimensions * 2);
     }
 
@@ -137,22 +139,42 @@ class FeatureTransformer {
         permute<16>(biases, PackusEpi16Order);
         permute<16>(weights, PackusEpi16Order);
 
-        permute<8>(threatWeights, PackusEpi16Order);
+        permute<8>(threatAndPpWeights, PackusEpi16Order);
     }
 
     void unpermute_weights() {
         permute<16>(biases, InversePackusEpi16Order);
         permute<16>(weights, InversePackusEpi16Order);
-        permute<8>(threatWeights, InversePackusEpi16Order);
+        permute<8>(threatAndPpWeights, InversePackusEpi16Order);
     }
+
+    auto threatWeights() { return threatAndPpWeights.data(); }
+    auto threatWeights() const { return threatAndPpWeights.data(); }
+    auto ppWeights() { return &threatAndPpWeights[ThreatFeatureSet::Dimensions * HalfDimensions]; }
+    auto ppWeights() const {
+        return &threatAndPpWeights[ThreatFeatureSet::Dimensions * HalfDimensions];
+    }
+
+    auto threatPsqtWeights() { return threatAndPpPsqtWeights.data(); }
+    auto threatPsqtWeights() const { return threatAndPpPsqtWeights.data(); }
+    auto ppPsqtWeights() {
+        return &threatAndPpPsqtWeights[ThreatFeatureSet::Dimensions * PSQTBuckets];
+    }
+    auto ppPsqtWeights() const {
+        return &threatAndPpPsqtWeights[ThreatFeatureSet::Dimensions * PSQTBuckets];
+    }
+
 
     // Read network parameters
     bool read_parameters(std::istream& stream) {
         read_leb_128(stream, biases);
 
-        read_little_endian<ThreatWeightType>(stream, threatWeights.data(),
+        read_little_endian<ThreatWeightType>(stream, threatWeights(),
                                              ThreatInputDimensions * HalfDimensions);
-        read_leb_128(stream, threatPsqtWeights);
+        read_leb_128(stream, threatPsqtWeights(), ThreatFeatureSet::Dimensions * PSQTBuckets);
+        read_little_endian<ThreatWeightType>(stream, ppWeights(),
+                                             PairInputDimensions * HalfDimensions);
+        read_leb_128(stream, ppPsqtWeights(), PairFeatureSet::Dimensions * PSQTBuckets);
 
         read_leb_128(stream, weights);
         read_leb_128(stream, psqtWeights);
@@ -170,9 +192,15 @@ class FeatureTransformer {
 
         write_leb_128<BiasType>(stream, copy->biases);
 
-        write_little_endian<ThreatWeightType>(stream, copy->threatWeights.data(),
+
+        write_little_endian<ThreatWeightType>(stream, copy->threatWeights(),
                                               ThreatInputDimensions * HalfDimensions);
-        write_leb_128<PSQTWeightType>(stream, copy->threatPsqtWeights);
+        write_leb_128<PSQTWeightType>(stream, copy->threatPsqtWeights(),
+                                      ThreatFeatureSet::Dimensions * PSQTBuckets);
+        write_little_endian<ThreatWeightType>(stream, copy->ppWeights(),
+                                              PairInputDimensions * HalfDimensions);
+        write_leb_128<PSQTWeightType>(stream, copy->ppPsqtWeights(),
+                                      PairFeatureSet::Dimensions * PSQTBuckets);
 
         write_leb_128<WeightType>(stream, copy->weights);
         write_leb_128<PSQTWeightType>(stream, copy->psqtWeights);
@@ -187,8 +215,8 @@ class FeatureTransformer {
         hash_combine(h, get_raw_data_hash(weights));
         hash_combine(h, get_raw_data_hash(psqtWeights));
 
-        hash_combine(h, get_raw_data_hash(threatWeights));
-        hash_combine(h, get_raw_data_hash(threatPsqtWeights));
+        hash_combine(h, get_raw_data_hash(threatAndPpWeights));
+        hash_combine(h, get_raw_data_hash(threatAndPpPsqtWeights));
 
         hash_combine(h, get_hash_value());
 
@@ -196,11 +224,12 @@ class FeatureTransformer {
     }
 
     // Convert input features
-    i32 transform(const Position&    pos,
-                           AccumulatorStack&  accumulatorStack,
-                           AccumulatorCaches& cache,
-                           OutputType*        output,
-                           int                bucket) const {
+    i32 transform(const Position&            pos,
+                  AccumulatorStack&          accumulatorStack,
+                  AccumulatorCaches&         cache,
+                  OutputType*                output,
+                  int                        bucket,
+                  NNZInfo<OutputDimensions>& nnzInfo) const {
 
         using namespace SIMD;
         accumulatorStack.evaluate(pos, *this, cache);
@@ -218,14 +247,17 @@ class FeatureTransformer {
         {
             const IndexType offset = (HalfDimensions / 2) * p;
 
+            [[maybe_unused]] auto cursor = nnzInfo.make_cursor(p);
+
 #if defined(VECTOR)
 
             constexpr IndexType OutputChunkSize = MaxChunkSize;
             static_assert((HalfDimensions / 2) % OutputChunkSize == 0);
             constexpr IndexType NumOutputChunks = HalfDimensions / 2 / OutputChunkSize;
 
-            const vec_t Zero  = vec_zero();
-            const vec_t FtMax = vec_set_16(FtMaxVal);
+            [[maybe_unused]] const vec_t   Zero  = vec_zero();
+            [[maybe_unused]] const vec_t   FtMax = vec_set_16(FtMaxVal);
+            [[maybe_unused]] constexpr int shift = 7;
 
             const vec_t* in0 = reinterpret_cast<const vec_t*>(&(accumulation[perspectives[p]][0]));
             const vec_t* in1 =
@@ -279,35 +311,63 @@ class FeatureTransformer {
             // 8 bits. Shifting it by 7 bits left will no longer occupy the
             // signed bit, so we are safe.
 
-            // Note that on NEON processors, we shift left by 6 instead
-            // because the instruction "vqdmulhq_s16" also doubles the
-            // return value after the multiplication, adding an extra shift
-            // to the left by 1, so we compensate by shifting less before
-            // the multiplication.
+            for (IndexType j = 0; j < NumOutputChunks; j += 2)
+            {
+                vec_t packed[2];
+                for (IndexType k = 0; k < 2; ++k)
+                {
+                    const IndexType i = (j + k) * 2;
 
-            constexpr int shift =
-    #if defined(USE_SSE2) || defined(USE_LASX) || defined(USE_LSX)
-              7;
+                    vec_t acc0a = in0[i + 0];
+                    vec_t acc0b = in0[i + 1];
+                    vec_t acc1a = in1[i + 0];
+                    vec_t acc1b = in1[i + 1];
+
+                    static_assert(FtMaxVal == 255);
+
+    #if defined(USE_NEON)
+                    uint16x8_t mul0 = vmull_u8(vqmovun_s16(acc0a), vqmovun_s16(acc1a));
+                    uint16x8_t mul1 = vmull_u8(vqmovun_s16(acc0b), vqmovun_s16(acc1b));
+
+                    uint8x16x2_t uzp =
+                      vuzpq_u8(vreinterpretq_u8_u16(mul0), vreinterpretq_u8_u16(mul1));
+                    uint8x16_t pab    = vshrq_n_u8(uzp.val[1], 1);
+                    vec_t      result = reinterpret_cast<vec_t>(pab);
+    #elif defined(USE_LSX) || defined(USE_LASX)
+                    vec_t pa = vec_packus_16(acc0a, acc0b);
+                    vec_t pb = vec_packus_16(acc1a, acc1b);
+
+                    vec_t hi     = vec_mulhi_8(pa, pb);
+                    vec_t result = vec_srli_8(hi, 1);
+    #elif defined(__wasm__)
+                    // _mm_mulhi_epi16 is lowered to 32-bit multiplies, so we take
+                    // a similar approach as the NEON path.
+                    vec_t mul0 = vec_packus_16(acc0a, acc0b);
+                    vec_t mul1 = vec_packus_16(acc1a, acc1b);
+
+                    vec_t low = wasm_u16x8_extmul_low_u8x16(mul0, mul1);
+                    vec_t hi  = wasm_u16x8_extmul_high_u8x16(mul0, mul1);
+
+                    // equivalent to vuzp2_u8
+                    vec_t merged = wasm_i8x16_shuffle(low, hi, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19,
+                                                      21, 23, 25, 27, 29, 31);
+                    vec_t result = wasm_u8x16_shr(merged, 1);
     #else
-              6;
+                    vec_t sum0a = vec_slli_16(vec_max_16(vec_min_16(acc0a, FtMax), Zero), shift);
+                    vec_t sum0b = vec_slli_16(vec_max_16(vec_min_16(acc0b, FtMax), Zero), shift);
+                    vec_t sum1a = vec_min_16(acc1a, FtMax);
+                    vec_t sum1b = vec_min_16(acc1b, FtMax);
+
+                    vec_t pa = vec_mulhi_16(sum0a, sum1a);
+                    vec_t pb = vec_mulhi_16(sum0b, sum1b);
+
+                    vec_t result = vec_packus_16(pa, pb);
     #endif
 
-            for (IndexType j = 0; j < NumOutputChunks; ++j)
-            {
-                const vec_t acc0a = in0[j * 2 + 0];
-                const vec_t acc0b = in0[j * 2 + 1];
-                const vec_t acc1a = in1[j * 2 + 0];
-                const vec_t acc1b = in1[j * 2 + 1];
+                    packed[k] = out[j + k] = result;
+                }
 
-                const vec_t sum0a = vec_slli_16(vec_max_16(vec_min_16(acc0a, FtMax), Zero), shift);
-                const vec_t sum0b = vec_slli_16(vec_max_16(vec_min_16(acc0b, FtMax), Zero), shift);
-                const vec_t sum1a = vec_min_16(acc1a, FtMax);
-                const vec_t sum1b = vec_min_16(acc1b, FtMax);
-
-                const vec_t pa = vec_mulhi_16(sum0a, sum1a);
-                const vec_t pb = vec_mulhi_16(sum0b, sum1b);
-
-                out[j] = vec_packus_16(pa, pb);
+                cursor.record2(packed[0], packed[1]);
             }
 
 #elif defined(USE_RVV)
@@ -367,19 +427,28 @@ class FeatureTransformer {
     alignas(CacheLineSize) std::array<BiasType, HalfDimensions> biases;
     alignas(
       CacheLineSize) std::array<WeightType, HalfDimensions * PSQFeatureSet::Dimensions> weights;
+
+    // Threats and pawn-pair features are concatenated into one array to allow for a single index to address either.
+    // The first pawn-pair feature is at index ThreatFeatureSet::Dimensions.
+    static_assert(PairFeatureSet::IndexBase == ThreatFeatureSet::Dimensions);
+
+    alignas(CacheLineSize) std::array<ThreatWeightType,
+                                      (ThreatFeatureSet::Dimensions + PairFeatureSet::Dimensions)
+                                        * HalfDimensions> threatAndPpWeights;
     alignas(CacheLineSize)
-      std::array<ThreatWeightType, HalfDimensions * ThreatFeatureSet::Dimensions> threatWeights;
-    alignas(CacheLineSize)
-      std::array<PSQTWeightType, PSQFeatureSet::Dimensions * PSQTBuckets> psqtWeights;
-    alignas(CacheLineSize)
-      std::array<PSQTWeightType, ThreatFeatureSet::Dimensions * PSQTBuckets> threatPsqtWeights;
+      std::array<PSQTWeightType, PSQTBuckets * PSQFeatureSet::Dimensions> psqtWeights;
+    // As above
+    alignas(CacheLineSize) std::array<PSQTWeightType,
+                                      (ThreatFeatureSet::Dimensions + PairFeatureSet::Dimensions)
+                                        * PSQTBuckets> threatAndPpPsqtWeights;
 };
 
 }  // namespace Stockfish::Eval::NNUE
 
 template<>
 struct std::hash<Stockfish::Eval::NNUE::FeatureTransformer> {
-    std::size_t operator()(const Stockfish::Eval::NNUE::FeatureTransformer& ft) const noexcept {
+    Stockfish::usize
+    operator()(const Stockfish::Eval::NNUE::FeatureTransformer& ft) const noexcept {
         return ft.get_content_hash();
     }
 };
