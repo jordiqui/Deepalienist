@@ -1,8 +1,5 @@
 # Deepalienist-5.30-220726
 
-<p align="center">
-  <img src="assets/revolution-logo.svg" alt="Deepalienist UCI chess engine logo featuring a minimalist French tricolor cockade" width="360" />
-</p>
 
 Deepalienist is a derivative of Stockfish that develops structural changes and explores new ideas to improve the project while complying with the GNU GPL v3 license. This release identifies itself as **Deepalienist-5.30-220726** developed by Jorge Ruiz and the Stockfish developers (see AUTHORS file).
 
