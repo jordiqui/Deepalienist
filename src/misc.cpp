@@ -121,9 +121,6 @@ class Logger {
     }
 };
 
-}  // namespace
-
-
 // Returns the full name of the current Stockfish version.
 //
 // For local dev compiles we try to append the commit SHA and
@@ -135,16 +132,31 @@ class Logger {
 //
 // For releases (non-dev builds) we only include the version number:
 //      Stockfish version
-std::string engine_version_info() {
-#ifdef ENGINE_PUBLIC_ID
-    return stringify(ENGINE_PUBLIC_ID);
+std::string engine_release_info() {
+#ifdef ENGINE_RELEASE_ID
+    return stringify(ENGINE_RELEASE_ID);
 #else
-    return "Deepalienist-5.10-130726";
+    return "Deepalienist-5.30-220726";
 #endif
 }
 
+std::string engine_public_info() {
+#ifdef ENGINE_PUBLIC_ID
+    return stringify(ENGINE_PUBLIC_ID);
+#else
+    return engine_release_info();
+#endif
+}
+
+}  // namespace
+
+std::string engine_version_info() {
+    return engine_public_info();
+}
+
 std::string engine_info(bool to_uci) {
-    return engine_version_info() + (to_uci ? "\nid author " : " by ")
+    return (to_uci ? engine_public_info() : engine_release_info())
+         + (to_uci ? "\nid author " : " by ")
          + "Jordi Quiñonero (see AUTHORS file)";
 }
 
