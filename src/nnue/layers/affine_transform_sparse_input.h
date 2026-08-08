@@ -181,6 +181,13 @@ class AffineTransformSparseInput {
         #define vec_set_32 __lsx_vreplgr2vr_w
         #define vec_add_dpbusd_32 SIMD::lsx_m128_add_dpbusd_epi32
     #endif
+    #if defined(USE_LASX)
+        #define vec_load_32(a) __lasx_xvldrepl_w(reinterpret_cast<const void*>(a), 0)
+    #elif defined(USE_LSX)
+        #define vec_load_32(a) __lsx_vldrepl_w(reinterpret_cast<const void*>(a), 0)
+    #else
+        #define vec_load_32(a) vec_set_32(load_as<i32>(a))
+    #endif
         constexpr IndexType OutputSimdWidth = sizeof(outvec_t) / sizeof(OutputType);
         constexpr IndexType NumAccums       = OutputDimensions / OutputSimdWidth;
         // If we're using high-latency dot product instructions, split the accumulators
@@ -222,9 +229,9 @@ class AffineTransformSparseInput {
             const isize   i0  = *start++;
             const isize   i1  = *start++;
             const isize   i2  = *start++;
-            const invec_t in0 = vec_set_32(load_as<i32>(input + i0 * sizeof(i32)));
-            const invec_t in1 = vec_set_32(load_as<i32>(input + i1 * sizeof(i32)));
-            const invec_t in2 = vec_set_32(load_as<i32>(input + i2 * sizeof(i32)));
+            const invec_t in0 = vec_load_32(input + i0 * sizeof(i32));
+            const invec_t in1 = vec_load_32(input + i1 * sizeof(i32));
+            const invec_t in2 = vec_load_32(input + i2 * sizeof(i32));
             const auto    col0 =
               reinterpret_cast<const invec_t*>(&weights_cp[i0 * OutputDimensions * ChunkSize]);
             const auto col1 =
@@ -246,7 +253,7 @@ class AffineTransformSparseInput {
         while (start < end)
         {
             const isize   i  = *start++;
-            const invec_t in = vec_set_32(load_as<i32>(input + i * sizeof(i32)));
+            const invec_t in = vec_load_32(input + i * sizeof(i32));
             const auto    col =
               reinterpret_cast<const invec_t*>(&weights_cp[i * OutputDimensions * ChunkSize]);
             for (IndexType k = 0; k < NumAccums; ++k)
@@ -281,7 +288,7 @@ class AffineTransformSparseInput {
             while (bits)
             {
                 const isize   i0   = pop_lsb(bits);
-                const invec_t in0  = vec_set_32(load_as<i32>(base_addr + i0 * sizeof(i32)));
+                const invec_t in0  = vec_load_32(base_addr + i0 * sizeof(i32));
                 const auto    col0 = reinterpret_cast<const invec_t*>(
                   &weights_base[i0 * OutputDimensions * ChunkSize]);
 
@@ -293,7 +300,7 @@ class AffineTransformSparseInput {
                 }
 
                 const isize   i1   = pop_lsb(bits);
-                const invec_t in1  = vec_set_32(load_as<i32>(base_addr + i1 * sizeof(i32)));
+                const invec_t in1  = vec_load_32(base_addr + i1 * sizeof(i32));
                 const auto    col1 = reinterpret_cast<const invec_t*>(
                   &weights_base[i1 * OutputDimensions * ChunkSize]);
 
@@ -309,7 +316,7 @@ class AffineTransformSparseInput {
                 const isize i0 = pop_lsb(bits);
                 if (!bits)
                 {
-                    const invec_t in0  = vec_set_32(load_as<i32>(base_addr + i0 * sizeof(i32)));
+                    const invec_t in0  = vec_load_32(base_addr + i0 * sizeof(i32));
                     const auto    col0 = reinterpret_cast<const invec_t*>(
                       &weights_base[i0 * OutputDimensions * ChunkSize]);
                     for (IndexType l = 0; l < NumAccums; ++l)
@@ -320,8 +327,8 @@ class AffineTransformSparseInput {
                 const isize i1 = pop_lsb(bits);
                 if (!bits)
                 {
-                    const invec_t in0  = vec_set_32(load_as<i32>(base_addr + i0 * sizeof(i32)));
-                    const invec_t in1  = vec_set_32(load_as<i32>(base_addr + i1 * sizeof(i32)));
+                    const invec_t in0  = vec_load_32(base_addr + i0 * sizeof(i32));
+                    const invec_t in1  = vec_load_32(base_addr + i1 * sizeof(i32));
                     const auto    col0 = reinterpret_cast<const invec_t*>(
                       &weights_base[i0 * OutputDimensions * ChunkSize]);
                     const auto col1 = reinterpret_cast<const invec_t*>(
@@ -335,9 +342,9 @@ class AffineTransformSparseInput {
                 }
 
                 const isize   i2   = pop_lsb(bits);
-                const invec_t in0  = vec_set_32(load_as<i32>(base_addr + i0 * sizeof(i32)));
-                const invec_t in1  = vec_set_32(load_as<i32>(base_addr + i1 * sizeof(i32)));
-                const invec_t in2  = vec_set_32(load_as<i32>(base_addr + i2 * sizeof(i32)));
+                const invec_t in0  = vec_load_32(base_addr + i0 * sizeof(i32));
+                const invec_t in1  = vec_load_32(base_addr + i1 * sizeof(i32));
+                const invec_t in2  = vec_load_32(base_addr + i2 * sizeof(i32));
                 const auto    col0 = reinterpret_cast<const invec_t*>(
                   &weights_base[i0 * OutputDimensions * ChunkSize]);
                 const auto col1 = reinterpret_cast<const invec_t*>(
@@ -364,7 +371,7 @@ class AffineTransformSparseInput {
                 #undef FIX_GCC15_MISOPTIMIZATION
             #endif
 
-                const invec_t in = vec_set_32(load_as<i32>(input_addr));
+                const invec_t in = vec_load_32(input_addr);
                 for (IndexType l = 0; l < NumAccums; ++l)
                     vec_add_dpbusd_32(acc[l], in, col[l]);
             }
@@ -384,6 +391,7 @@ class AffineTransformSparseInput {
             outptr[k] = acc[k];
 
     #undef vec_set_32
+    #undef vec_load_32
     #undef vec_add_dpbusd_32
     #ifdef vec_add_32
         #undef vec_add_32
