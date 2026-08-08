@@ -157,7 +157,7 @@ std::string engine_version_info() {
 std::string engine_info(bool to_uci) {
     return (to_uci ? engine_public_info() : engine_release_info())
          + (to_uci ? "\nid author " : " by ")
-         + "Jordi Quiñonero (see AUTHORS file)";
+         + "Jorge Ruiz Centelles";
 }
 
 
