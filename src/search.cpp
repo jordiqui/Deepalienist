@@ -1196,8 +1196,8 @@ moves_loop:  // When in check, search starts here
                 int dIndex = std::min(int(depth), int(lmrDivisor.size())) - 1;
                 lmrDepth += history / lmrDivisor[dIndex];
 
-                Value futilityValue = ss->staticEval + 42 + 161 * !bestMove + 127 * lmrDepth
-                                    + 85 * (ss->staticEval > alpha);
+                Value futilityValue =
+                  ss->staticEval + 119 * lmrDepth + 90 * (ss->staticEval > alpha) + 164;
 
                 // Futility pruning: parent node
                 // (*Scaler): Generally, more frequent futility pruning
