@@ -136,7 +136,7 @@ std::string engine_release_info() {
 #ifdef ENGINE_RELEASE_ID
     return stringify(ENGINE_RELEASE_ID);
 #else
-    return "Deepalienist-5.30-220726";
+    return "Deepalienist-5.40-080826";
 #endif
 }
 
