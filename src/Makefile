@@ -72,7 +72,7 @@ ENGINE_RELEASE_ID = $(ENGINE_BASENAME)-$(RELEASE_TAG)
 ENGINE_PUBLIC_ID = $(ENGINE_RELEASE_ID)-$(BUILD_ARCH_TAG)
 EXE = $(ENGINE_PUBLIC_ID)$(EXESUF)
 
-NNUE_NET = nn-ab28990d4ea3.nnue
+NNUE_NET = nn-1a298aa575a0.nnue
 
 ### Installation dir definitions
 PREFIX = /usr/local
