@@ -1143,12 +1143,12 @@ void Position::undo_move(Move m) {
 }
 
 inline void add_dirty_threat(DirtyThreats* const dts,
-                             bool                PutPiece,
+                             bool                putPiece,
                              Piece               pc,
                              Piece               threatened,
                              Square              s,
                              Square              threatenedSq) {
-    dts->list.push_back({pc, threatened, s, threatenedSq, PutPiece});
+    dts->list.push_back({pc, threatened, s, threatenedSq, putPiece});
 }
 
 #ifdef USE_AVX512ICL
@@ -1190,8 +1190,9 @@ constexpr bool can_slider_threat(Piece pc, Piece slider) {
     return type_of(pc) != QUEEN || type_of(slider) == QUEEN;
 }
 
-template<bool PutPiece, bool ComputeRay>
+template<bool ComputeRay>
 void Position::update_piece_threats(Piece               pc,
+                                    bool                putPiece,
                                     Square              s,
                                     DirtyThreats* const dts,
                                     // Silence spurious warning on GCC 10
@@ -1219,11 +1220,11 @@ void Position::update_piece_threats(Piece               pc,
                 const Square threatenedSq = lsb(discovered);
                 const Piece  threatenedPc = piece_on(threatenedSq);
                 if (can_slider_threat(threatenedPc, slider))
-                    add_dirty_threat(dts, !PutPiece, slider, threatenedPc, sliderSq, threatenedSq);
+                    add_dirty_threat(dts, !putPiece, slider, threatenedPc, sliderSq, threatenedSq);
             }
 
             if (addDirectAttacks && can_slider_threat(pc, slider))
-                add_dirty_threat(dts, PutPiece, slider, pc, sliderSq, s);
+                add_dirty_threat(dts, putPiece, slider, pc, sliderSq, s);
         }
     };
 
@@ -1251,20 +1252,16 @@ void Position::update_piece_threats(Piece               pc,
                          | (attacks_bb<PAWN>(s, BLACK) & pieces(WHITE, PAWN));
 
 #ifdef USE_AVX512ICL
-
-
     write_multiple_dirties<DirtyThreat::ThreatenedSqOffset, DirtyThreat::ThreatenedPcOffset>(
-      *this, threatened, {pc, NO_PIECE, s, Square(0), PutPiece}, dts);
+      *this, threatened, {pc, NO_PIECE, s, Square(0), putPiece}, dts);
 
     const Bitboard directSliders = pt == QUEEN ? sliders & pieces(QUEEN) : sliders;
     write_multiple_dirties<DirtyThreat::PcSqOffset, DirtyThreat::PcOffset>(
-      *this, directSliders | incomingThreats, {NO_PIECE, pc, Square(0), s, PutPiece}, dts);
-
+      *this, directSliders | incomingThreats, {NO_PIECE, pc, Square(0), s, putPiece}, dts);
 
     // For ICL, direct threats were written above
     if constexpr (ComputeRay)
         process_sliders(false);
-
 #else
     while (threatened)
     {
@@ -1273,7 +1270,7 @@ void Position::update_piece_threats(Piece               pc,
         assert(threatenedSq != s);
         assert(threatenedPc != NO_PIECE);
 
-        add_dirty_threat(dts, PutPiece, pc, threatenedPc, s, threatenedSq);
+        add_dirty_threat(dts, putPiece, pc, threatenedPc, s, threatenedSq);
     }
 
     if constexpr (ComputeRay)
@@ -1288,7 +1285,7 @@ void Position::update_piece_threats(Piece               pc,
         assert(srcSq != s);
         assert(srcPc != NO_PIECE);
 
-        add_dirty_threat(dts, PutPiece, srcPc, pc, srcSq, s);
+        add_dirty_threat(dts, putPiece, srcPc, pc, srcSq, s);
     }
 #endif
 }
@@ -1344,7 +1341,7 @@ void Position::do_castling(Color               us,
 
 // Used to do a "null move": it flips
 // the side to move without executing any move on the board.
-void Position::do_null_move(StateInfo& newSt, const TranspositionTable&) {
+void Position::do_null_move(StateInfo& newSt) {
 
     assert(!checkers());
     assert(&newSt != st);

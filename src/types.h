@@ -237,8 +237,7 @@ constexpr Depth DEPTH_QS = 0;
 // compare lower than any quiescence or regular depth. DEPTH_NONE is used
 // for the transposition table entry occupancy check (see tt.cpp), and
 // should thus be lower than DEPTH_UNSEARCHED.
-constexpr Depth DEPTH_UNSEARCHED   = -2;
-constexpr Depth DEPTH_ENTRY_OFFSET = -3;
+constexpr Depth DEPTH_UNSEARCHED = -2;
 constexpr Depth DEPTH_NONE       = -3;
 
 // clang-format off

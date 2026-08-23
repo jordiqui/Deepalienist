@@ -118,24 +118,6 @@ class AffineTransformSparseInput {
     }
 
     // Forward propagation
-    void propagate(const InputType* input, OutputType* output) const {
-        NNZInfo<InDims> nnzInfo{};
-
-#if defined(USE_AVX512)
-        for (IndexType i = 0; i < InputDimensions / 4; ++i)
-            if (load_as<i32>(input + i * sizeof(i32)) != 0)
-                nnzInfo.nnz[nnzInfo.count++] = static_cast<u16>(i);
-#else
-        std::memset(nnzInfo.bitset, 0, sizeof(nnzInfo.bitset));
-        for (IndexType i = 0; i < InputDimensions / 4; ++i)
-            if (load_as<i32>(input + i * sizeof(i32)) != 0)
-                nnzInfo.bitset[i / 8] |= static_cast<u8>(1U << (i & 7));
-#endif
-
-        propagate(input, output, nnzInfo);
-    }
-
-    // Forward propagation
     void propagate(const InputType*                        input,
                    OutputType*                             output,
                    [[maybe_unused]] const NNZInfo<InDims>& nnzInfo) const {

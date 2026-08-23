@@ -23,14 +23,13 @@
 #include <array>
 #include <atomic>
 #include <cassert>
-#include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
+#include <cstring>
 
 #include "history.h"
 #include "misc.h"
@@ -60,7 +59,6 @@ class Network;
 }
 
 namespace Search {
-
 
 // syzygy_extend_pv() may lead to PVs longer than MAX_PLY
 struct RootPVMoves: public std::vector<Move> {
@@ -114,13 +112,11 @@ struct PVMoves {
     }
 };
 
-
 // Stack struct keeps track of the information we need to remember from nodes
 // shallower and deeper in the tree during the search. Each search thread has
 // its own array of Stack objects, indexed by the current ply.
 struct Stack {
-    bool followPV;
-    Move*                       pv;
+    PVMoves*                    pv;
     PieceToHistory*             continuationHistory;
     CorrectionHistory<PieceTo>* continuationCorrectionHistory;
     int                         ply;
@@ -132,6 +128,7 @@ struct Stack {
     bool                        inCheck;
     bool                        ttPv;
     bool                        ttHit;
+    bool                        followPV;
     int                         cutoffCnt;
     int                         reduction;
 };
@@ -144,17 +141,16 @@ struct RootMove {
 
     explicit RootMove(Move m) { pv.push_back(m); }
     bool extract_ponder_from_tt(const TranspositionTable& tt, Position& pos);
-    bool operator==(const Move& m) const { return pv[0] == m; }
     bool score_is_bound() const { return scoreLowerbound || scoreUpperbound; }
     bool score_is_exact_loss() const {
         return score != -VALUE_INFINITE && is_loss(score) && !score_is_bound();
     }
     void unset_bound_flags() { scoreLowerbound = scoreUpperbound = false; }
+    bool operator==(const Move& m) const { return pv[0] == m; }
     // Sort in descending order
     bool operator<(const RootMove& m) const {
         return m.score != score ? m.score < score : m.previousScore < previousScore;
     }
-
 
     u64         effort             = 0;
     Value       score              = -VALUE_INFINITE;
@@ -169,7 +165,6 @@ struct RootMove {
     int         tbRank             = 0;
     Value       tbScore;
     RootPVMoves pv, previousPV;
-
 };
 
 using RootMoves = std::vector<RootMove>;
@@ -191,7 +186,7 @@ struct LimitsType {
     std::vector<std::string> searchmoves;
     TimePoint                time[COLOR_NB], inc[COLOR_NB], npmsec, movetime, startTime;
     int                      movestogo, depth, mate, perft, infinite;
-    u64                 nodes;
+    u64                      nodes;
     bool                     ponderMode;
 };
 
@@ -199,22 +194,22 @@ struct LimitsType {
 // The UCI stores the uci options, thread pool, and transposition table.
 // This struct is used to easily forward data to the Search::Worker class.
 struct SharedState {
-    SharedState(const OptionsMap&                                         optionsMap,
-                ThreadPool&                                               threadPool,
-                TranspositionTable&                                       transpositionTable,
-                std::map<NumaIndex, SharedHistories>&                     sharedHists,
-                const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& nets) :
+    SharedState(const OptionsMap&                                        optionsMap,
+                ThreadPool&                                              threadPool,
+                TranspositionTable&                                      transpositionTable,
+                std::map<NumaIndex, SharedHistories>&                    sharedHists,
+                const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& net) :
         options(optionsMap),
         threads(threadPool),
         tt(transpositionTable),
         sharedHistories(sharedHists),
-        networks(nets) {}
+        network(net) {}
 
-    const OptionsMap&                                         options;
-    ThreadPool&                                               threads;
-    TranspositionTable&                                       tt;
-    std::map<NumaIndex, SharedHistories>&                     sharedHistories;
-    const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& networks;
+    const OptionsMap&                                        options;
+    ThreadPool&                                              threads;
+    TranspositionTable&                                      tt;
+    std::map<NumaIndex, SharedHistories>&                    sharedHistories;
+    const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& network;
 };
 
 class Worker;
@@ -234,13 +229,13 @@ struct InfoShort {
 
 struct InfoFull: InfoShort {
     int              selDepth;
-    usize           multiPV;
+    usize            multiPV;
     std::string_view wdl;
     std::string_view bound;
-    usize           timeMs;
-    usize           nodes;
-    usize           nps;
-    usize           tbHits;
+    usize            timeMs;
+    usize            nodes;
+    usize            nps;
+    usize            tbHits;
     std::string_view pv;
     int              hashfull;
 };
@@ -248,7 +243,7 @@ struct InfoFull: InfoShort {
 struct InfoIteration {
     int              depth;
     std::string_view currmove;
-    usize           currmovenumber;
+    usize            currmovenumber;
 };
 
 // Skill structure is used to implement strength limit. If we have a UCI_Elo,
@@ -363,7 +358,7 @@ class Worker {
     ContinuationHistory (&continuationHistory)[2][2];
 
    private:
-    void iterative_deepening();
+    bool iterative_deepening();
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
     void
@@ -381,7 +376,7 @@ class Worker {
     template<NodeType nodeType>
     Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta);
 
-    Depth reduction(bool i, Depth d, int mn, int delta) const;
+    int reduction(bool i, Depth d, int mn, int delta) const;
 
     // Pointer to the search manager, only allowed to be called by the main thread
     SearchManager* main_manager() const {
@@ -395,18 +390,19 @@ class Worker {
 
     LimitsType limits;
 
-    usize                pvIdx, pvLast;
+    usize              pvIdx, pvLast;
     RelaxedAtomic<u64> nodes, tbHits, bestMoveChanges;
-    int                   selDepth, nmpMinPly;
+    int                selDepth, nmpMinPly;
 
     Value optimism[COLOR_NB];
 
     Position  rootPos;
     StateInfo rootState;
     RootMoves rootMoves;
-    std::vector<Move> lastIterationPV;
-    Depth     rootDepth, completedDepth;
+    Depth     rootDepth;
     Value     rootDelta;
+
+    PVMoves lastIterationIdxPV;
 
     usize                     threadIdx, numaThreadIdx, numaTotal;
     NumaReplicatedAccessToken numaAccessToken;
@@ -419,10 +415,10 @@ class Worker {
 
     Tablebases::Config tbConfig;
 
-    const OptionsMap&                                         options;
-    ThreadPool&                                               threads;
-    TranspositionTable&                                       tt;
-    const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& networks;
+    const OptionsMap&                                        options;
+    ThreadPool&                                              threads;
+    TranspositionTable&                                      tt;
+    const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& network;
 
     // Used by NNUE
     Eval::NNUE::AccumulatorStack  accumulatorStack;

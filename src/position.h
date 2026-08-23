@@ -25,6 +25,7 @@
 #include <iosfwd>
 #include <memory>
 #include <new>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -36,12 +37,6 @@ namespace Stockfish {
 
 class TranspositionTable;
 struct SharedHistories;
-
-// This error should be used whenever a position is suspected to be unsupported
-// by the engine. In particular positions that may cause hard errors like segmentation fault.
-struct PositionSetError: std::runtime_error {
-    using std::runtime_error::runtime_error;
-};
 
 // StateInfo struct stores information needed to restore a Position object to
 // its previous state when we retract a move. Whenever a move is made on the
@@ -77,6 +72,12 @@ struct StateInfo {
 // 'draw by repetition' detection. Use a std::deque because pointers to
 // elements are not invalidated upon list resizing.
 using StateListPtr = std::unique_ptr<std::deque<StateInfo>>;
+
+// This error should be used whenever a position is suspected to be unsupported
+// by the engine. In particular positions that may cause hard errors like segmentation fault.
+struct PositionSetError: std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 // Position class stores information regarding the board representation as
 // pieces, side to move, hash keys, castling info, etc. Important methods are
@@ -150,7 +151,7 @@ class Position {
                  const TranspositionTable* tt,
                  const SharedHistories*    worker);
     void undo_move(Move m);
-    void do_null_move(StateInfo& newSt, const TranspositionTable& tt);
+    void do_null_move(StateInfo& newSt);
     void undo_null_move();
 
     // Static Exchange Evaluation
@@ -196,8 +197,9 @@ class Position {
     void set_check_info() const;
 
     // Other helpers
-    template<bool PutPiece, bool ComputeRay = true>
+    template<bool ComputeRay = true>
     void update_piece_threats(Piece               pc,
+                              bool                putPiece,
                               Square              s,
                               DirtyThreats* const dts,
                               Bitboard            noRaysContaining = -1ULL) const;
@@ -301,7 +303,7 @@ inline Bitboard Position::attacks_by(Color c) const {
         Bitboard threats   = 0;
         Bitboard attackers = pieces(c, Pt);
         while (attackers)
-            threats |= attacks_bb<Pt>(pop_lsb(attackers), pieces());
+            threats |= Attacks::attacks_bb<Pt>(pop_lsb(attackers), pieces());
         return threats;
     }
 }
@@ -384,14 +386,14 @@ inline void Position::put_piece(Piece pc, Square s, DirtyThreats* const dts) {
     pieceCount[make_piece(color_of(pc), ALL_PIECES)]++;
 
     if (dts)
-        update_piece_threats<true>(pc, s, dts);
+        update_piece_threats(pc, true, s, dts);
 }
 
 inline void Position::remove_piece(Square s, DirtyThreats* const dts) {
     Piece pc = board[s];
 
     if (dts)
-        update_piece_threats<false>(pc, s, dts);
+        update_piece_threats(pc, false, s, dts);
 
     byTypeBB[ALL_PIECES] ^= s;
     byTypeBB[type_of(pc)] ^= s;
@@ -406,7 +408,7 @@ inline void Position::move_piece(Square from, Square to, DirtyThreats* const dts
     Bitboard fromTo = from | to;
 
     if (dts)
-        update_piece_threats<false>(pc, from, dts, fromTo);
+        update_piece_threats(pc, false, from, dts, fromTo);
 
     byTypeBB[ALL_PIECES] ^= fromTo;
     byTypeBB[type_of(pc)] ^= fromTo;
@@ -415,7 +417,7 @@ inline void Position::move_piece(Square from, Square to, DirtyThreats* const dts
     board[to]   = pc;
 
     if (dts)
-        update_piece_threats<true>(pc, to, dts, fromTo);
+        update_piece_threats(pc, true, to, dts, fromTo);
 }
 
 inline void Position::swap_piece(Square s, Piece pc, DirtyThreats* const dts) {
@@ -424,12 +426,12 @@ inline void Position::swap_piece(Square s, Piece pc, DirtyThreats* const dts) {
     remove_piece(s);
 
     if (dts)
-        update_piece_threats<false, false>(old, s, dts);
+        update_piece_threats<false>(old, false, s, dts);
 
     put_piece(pc, s);
 
     if (dts)
-        update_piece_threats<true, false>(pc, s, dts);
+        update_piece_threats<false>(pc, true, s, dts);
 }
 
 inline void Position::do_move(Move m, StateInfo& newSt, const TranspositionTable* tt = nullptr) {

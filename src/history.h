@@ -107,7 +107,7 @@ struct DynStats {
             data[start++].fill(value);
     }
     usize get_size() const { return size; }
-    T&     operator[](usize index) {
+    T&    operator[](usize index) {
         assert(index < size);
         return data.get()[index];
     }
@@ -117,7 +117,7 @@ struct DynStats {
     }
 
    private:
-    usize            size;
+    usize             size;
     LargePagePtr<T[]> data;
 };
 
@@ -143,17 +143,13 @@ using PieceToHistory = AtomicStats<i16, 30000, PIECE_NB, SQUARE_NB>;
 using ContinuationHistory = MultiArray<PieceToHistory, PIECE_NB, SQUARE_NB>;
 
 // PawnHistory is addressed by the pawn structure and a move's [piece][to]
-using PawnHistory =
-  DynStats<AtomicStats<i16, 8192, PIECE_NB, SQUARE_NB>, PAWN_HISTORY_BASE_SIZE>;
+using PawnHistory = DynStats<AtomicStats<i16, 8192, PIECE_NB, SQUARE_NB>, PAWN_HISTORY_BASE_SIZE>;
 
 // Correction histories record differences between the static evaluation of
 // positions and their search score. It is used to improve the static evaluation
 // used by some search heuristics.
 // see https://www.chessprogramming.org/Static_Evaluation_Correction_History
 enum CorrHistType {
-    Pawn,          // By color and pawn structure
-    Minor,         // By color and positions of minor pieces (Knight, Bishop)
-    NonPawn,       // By non-pawn material positions and color
     PieceTo,       // By [piece][to] move
     Continuation,  // Combined history of move pairs
 };
@@ -176,10 +172,7 @@ struct CorrectionBundle {
 namespace Detail {
 
 template<CorrHistType>
-struct CorrHistTypedef {
-    using type =
-      DynStats<Stats<i16, CORRECTION_HISTORY_LIMIT, COLOR_NB>, CORRHIST_BASE_SIZE>;
-};
+struct CorrHistTypedef;
 
 template<>
 struct CorrHistTypedef<PieceTo> {
@@ -189,12 +182,6 @@ struct CorrHistTypedef<PieceTo> {
 template<>
 struct CorrHistTypedef<Continuation> {
     using type = MultiArray<CorrHistTypedef<PieceTo>::type, PIECE_NB, SQUARE_NB>;
-};
-
-template<>
-struct CorrHistTypedef<NonPawn> {
-    using type = DynStats<Stats<i16, CORRECTION_HISTORY_LIMIT, COLOR_NB, COLOR_NB>,
-                          CORRHIST_BASE_SIZE>;
 };
 
 }

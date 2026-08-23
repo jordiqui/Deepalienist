@@ -19,7 +19,6 @@
 #ifndef UCI_H_INCLUDED
 #define UCI_H_INCLUDED
 
-#include <cstdint>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -36,6 +35,8 @@ class Score;
 enum Square : u8;
 using Value = int;
 
+constexpr auto StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 class UCIEngine {
    public:
     UCIEngine(CommandLine cli);
@@ -45,7 +46,7 @@ class UCIEngine {
     static int         to_cp(Value v, const Position& pos);
     static std::string format_score(const Score& s);
     static std::string square(Square s);
-    static std::string move(Move m, bool chess960);
+    static std::string move(Move m, bool chess960 = false);
     static std::string wdl(Value v, const Position& pos);
     static std::string to_lower(std::string str);
     static Move        to_move(const Position& pos, std::string str);
@@ -57,27 +58,23 @@ class UCIEngine {
    private:
     Engine      engine;
     CommandLine cli;
-    bool        suppressNonEssentialInfo = false;
-    TimePoint   lastInfoEmissionTimeMs   = 0;
     std::string currentCmd;
 
     static void print_info_string(std::string_view str);
-    static bool should_suppress_non_essential_info(const Search::LimitsType& limits);
 
-    void          go(std::istringstream& is);
-    void          bench(std::istream& args);
-    void          benchmark(std::istream& args);
-    void          position(std::istringstream& is);
-    void          setoption(std::istringstream& is);
-    u64 perft(const Search::LimitsType&);
+    void go(std::istringstream& is);
+    void bench(std::istream& args);
+    void benchmark(std::istream& args);
+    void position(std::istringstream& is);
+    void setoption(std::istringstream& is);
+    u64  perft(const Search::LimitsType&);
 
-    void on_update_no_moves(const Engine::InfoShort& info);
-    void on_update_full(const Engine::InfoFull& info, bool showWDL);
-    void on_iter(const Engine::InfoIter& info);
-    void on_bestmove(std::string_view bestmove, std::string_view ponder);
+    static void on_update_no_moves(const Engine::InfoShort& info);
+    static void on_update_full(const Engine::InfoFull& info, bool showWDL);
+    static void on_iter(const Engine::InfoIter& info);
+    static void on_bestmove(std::string_view bestmove, std::string_view ponder);
 
     void init_search_update_listeners();
-
 
     [[noreturn]] void terminate_on_critical_error(const std::string& message);
 };

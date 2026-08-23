@@ -20,15 +20,17 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstdlib>
 #include <deque>
 #include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #include "bitboard.h"
-#include "evaluate.h"
 #include "history.h"
 #include "memory.h"
 #include "movegen.h"
@@ -45,9 +47,9 @@ namespace Stockfish {
 // in idle_loop(). Note that 'searching' and 'exit' should be already set.
 Thread::Thread(Search::SharedState&                    sharedState,
                std::unique_ptr<Search::ISearchManager> sm,
-               usize                                  n,
-               usize                                  numaN,
-               usize                                  totalNumaCount,
+               usize                                   n,
+               usize                                   numaN,
+               usize                                   totalNumaCount,
                OptionalThreadToNumaNodeBinder          binder) :
     idx(n),
     idxInNuma(numaN),
@@ -199,7 +201,7 @@ void ThreadPool::set(const NumaConfig&                           numaConfig,
         for (auto pair : counts)
         {
             NumaIndex numaIndex = pair.first;
-            u64  count     = pair.second;
+            u64       count     = pair.second;
             auto      f         = [&]() {
                 sharedState.sharedHistories.try_emplace(numaIndex, next_power_of_two(count));
             };
@@ -214,7 +216,7 @@ void ThreadPool::set(const NumaConfig&                           numaConfig,
 
         while (threads.size() < requested)
         {
-            const usize    threadId      = threads.size();
+            const usize     threadId      = threads.size();
             const NumaIndex numaId        = doBindThreads ? boundThreadToNumaNode[threadId] : 0;
             auto            create_thread = [&]() {
                 auto manager = threadId == 0
@@ -291,9 +293,8 @@ void ThreadPool::start_thinking(const OptionsMap&  options,
 
     main_thread()->wait_for_search_finished();
 
-    main_manager()->stopOnPonderhit = stop = abortedSearch = false;
-    main_manager()->ponder                                 = limits.ponderMode;
-
+    main_manager()->stopOnPonderhit = stop = false;
+    main_manager()->ponder                 = limits.ponderMode;
 
     increaseDepth = true;
 
@@ -331,8 +332,8 @@ void ThreadPool::start_thinking(const OptionsMap&  options,
             th->worker->limits = limits;
             th->worker->nodes = th->worker->tbHits = th->worker->bestMoveChanges = 0;
             th->worker->nmpMinPly                                                = 0;
-            th->worker->rootDepth = th->worker->completedDepth = 0;
-            th->worker->rootMoves                              = rootMoves;
+            th->worker->rootDepth                                                = 0;
+            th->worker->rootMoves                                                = rootMoves;
             th->worker->rootPos.set(pos.fen(), pos.is_chess960(), &th->worker->rootState);
             th->worker->rootState = setupStates->back();
             th->worker->tbConfig  = tbConfig;
@@ -362,40 +363,36 @@ Thread* ThreadPool::get_best_thread() const {
 
     for (auto&& th : threads)
     {
-        const auto bestThreadScore = bestThread->worker->rootMoves[0].score;
-        const auto newThreadScore  = th->worker->rootMoves[0].score;
+        const auto& bestThreadMove = bestThread->worker->rootMoves[0];
+        const auto& newThreadMove  = th->worker->rootMoves[0];
 
-        const auto& bestThreadPV = bestThread->worker->rootMoves[0].pv;
-        const auto& newThreadPV  = th->worker->rootMoves[0].pv;
+        const auto bestThreadMoveVote = votes[bestThreadMove.pv[0]];
+        const auto newThreadMoveVote  = votes[newThreadMove.pv[0]];
 
-        const auto bestThreadMoveVote = votes[bestThreadPV[0]];
-        const auto newThreadMoveVote  = votes[newThreadPV[0]];
+        // Aborted (d1) searches may lead to inexact win (or loss) scores.
+        const bool bestThreadDecisive = bestThreadMove.score != -VALUE_INFINITE
+                                     && is_decisive(bestThreadMove.score)
+                                     && !bestThreadMove.score_is_bound();
+        const bool newThreadDecisive = newThreadMove.score != -VALUE_INFINITE
+                                    && is_decisive(newThreadMove.score)
+                                    && !newThreadMove.score_is_bound();
 
-        const bool bestThreadInProvenWin = is_win(bestThreadScore);
-        const bool newThreadInProvenWin  = is_win(newThreadScore);
-
-        const bool bestThreadInProvenLoss =
-          bestThreadScore != -VALUE_INFINITE && is_loss(bestThreadScore);
-        const bool newThreadInProvenLoss =
-          newThreadScore != -VALUE_INFINITE && is_loss(newThreadScore);
-
-        if (bestThreadInProvenWin)
+        if (bestThreadDecisive)
         {
-            // Make sure we pick the shortest mate / TB conversion
-            if (newThreadScore > bestThreadScore)
+            // Make sure we pick the shortest mate / TB conversion.
+            if (newThreadDecisive && std::abs(newThreadMove.score) > std::abs(bestThreadMove.score))
+            {
+                assert((is_win(bestThreadMove.score) && is_win(newThreadMove.score))
+                       || (is_loss(bestThreadMove.score) && is_loss(newThreadMove.score)));
+
                 bestThread = th.get();
+            }
         }
-        else if (bestThreadInProvenLoss)
-        {
-            // Make sure we pick the shortest mated / TB conversion
-            if (newThreadInProvenLoss && newThreadScore < bestThreadScore)
-                bestThread = th.get();
-        }
-        else if (newThreadInProvenWin || newThreadInProvenLoss
-                 || (!is_loss(newThreadScore)
+        else if (newThreadDecisive
+                 || (!is_loss(newThreadMove.score)
                      && (newThreadMoveVote > bestThreadMoveVote
                          || (newThreadMoveVote == bestThreadMoveVote
-                             && newThreadPV.size() > bestThreadPV.size()))))
+                             && newThreadMove.pv.size() > bestThreadMove.pv.size()))))
             bestThread = th.get();
     }
 
@@ -421,6 +418,10 @@ void ThreadPool::wait_for_search_finished() const {
             th->wait_for_search_finished();
 }
 
+std::vector<usize> ThreadPool::get_bound_thread_to_numa_node() const {
+    return boundThreadToNumaNode;
+}
+
 std::vector<usize> ThreadPool::get_bound_thread_count_by_numa_node() const {
     std::vector<usize> counts;
 
@@ -438,6 +439,13 @@ std::vector<usize> ThreadPool::get_bound_thread_count_by_numa_node() const {
     }
 
     return counts;
+}
+
+usize ThreadPool::numa_nodes() const {
+    std::unordered_set<usize> seen;
+    for (NumaIndex n : boundThreadToNumaNode)
+        seen.insert(n);
+    return std::max(seen.size(), usize(1));
 }
 
 void ThreadPool::ensure_network_replicated() {
