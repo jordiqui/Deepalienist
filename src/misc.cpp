@@ -136,7 +136,7 @@ std::string engine_release_info() {
 #ifdef ENGINE_RELEASE_ID
     return stringify(ENGINE_RELEASE_ID);
 #else
-    return "Deepalienist-5.40-080826";
+    return "Deepalienist-5.50-230826";
 #endif
 }
 
@@ -155,9 +155,12 @@ std::string engine_version_info() {
 }
 
 std::string engine_info(bool to_uci) {
-    return (to_uci ? engine_public_info() : engine_release_info())
-         + (to_uci ? "\nid author " : " by ")
-         + "Jorge Ruiz Centelles";
+    if (to_uci)
+        return engine_public_info() + "\nid author Jorge Ruiz Centelles";
+
+    return engine_release_info()
+         + " by Jorge Ruiz Centelles"
+         + "\nBased on Stockfish; credits to the Stockfish authors and developers (see AUTHORS file)";
 }
 
 
