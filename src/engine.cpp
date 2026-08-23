@@ -49,7 +49,6 @@ namespace Stockfish {
 
 namespace NN = Eval::NNUE;
 
-constexpr auto StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 int MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
 
 // The default configuration will attempt to group L3 domains up to 32 threads.
@@ -60,17 +59,10 @@ constexpr NumaAutoPolicy DefaultNumaPolicy = BundledL3Policy{32};
 
 namespace {
 bool root_may_be_in_tablebase(const Position& pos, const OptionsMap& options) {
-    if (!options.count("SyzygyProbeLimit"))
-        return false;
-
     int cardinality = int(options["SyzygyProbeLimit"]);
-
     if (cardinality <= 0)
         return false;
-
-    if (cardinality > Tablebases::MaxCardinality)
-        cardinality = Tablebases::MaxCardinality;
-
+    cardinality = std::min(cardinality, Tablebases::MaxCardinality);
     return cardinality >= popcount(pos.pieces()) && !pos.can_castle(ANY_CASTLING);
 }
 }  // namespace
@@ -81,7 +73,7 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
     states(new std::deque<StateInfo>(1)),
     threads(),
     networkFile{std::nullopt, ""},
-    networks(numaContext, get_default_network()) {
+    network(numaContext, get_default_network()) {
 
     pos.set(StartFEN, false, &states->back());
 
@@ -202,17 +194,16 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
 
 std::variant<u64, PositionSetError>
 Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
-    verify_networks();
+    verify_network();
 
     return Benchmark::perft(fen, depth, isChess960);
 }
 
 void Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
+    verify_network();
 
-    verify_networks();
-
-    if (limits.perft == 0 && !root_may_be_in_tablebase(pos, options))
+    if (!root_may_be_in_tablebase(pos, options))
     {
         const Move bookMove = bookManager.probe(pos, options);
         if (bookMove != Move::none())
@@ -256,13 +247,14 @@ void Engine::set_on_bestmove(std::function<void(std::string_view, std::string_vi
 
 void Engine::set_on_start(std::function<void()>&& f) { updateContext.onStart = std::move(f); }
 
-void Engine::set_on_verify_networks(std::function<void(std::string_view)>&& f) {
-    onVerifyNetworks = std::move(f);
+void Engine::set_on_verify_network(std::function<void(std::string_view)>&& f) {
+    onVerifyNetwork = std::move(f);
 }
 
 void Engine::wait_for_search_finished() { threads.main_thread()->wait_for_search_finished(); }
 
-std::optional<PositionSetError> Engine::set_position(const std::string& fen, const std::vector<std::string>& moves) {
+std::optional<PositionSetError> Engine::set_position(const std::string&              fen,
+                                                     const std::vector<std::string>& moves) {
     // Drop the old state and create a new one
     states   = StateListPtr(new std::deque<StateInfo>(1));
     auto err = pos.set(fen, options["UCI_Chess960"], &states->back());
@@ -315,7 +307,7 @@ bool Engine::set_numa_config_from_option(const std::string& o) {
 
 void Engine::resize_threads() {
     threads.wait_for_search_finished();
-    threads.set(numaContext.get_numa_config(), {options, threads, tt, sharedHists, networks},
+    threads.set(numaContext.get_numa_config(), {options, threads, tt, sharedHists, network},
                 updateContext);
 
     // Reallocate the hash with the new threadpool size
@@ -332,11 +324,11 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 
 // network related
 
-void Engine::verify_networks() const {
+void Engine::verify_network() const {
     const auto file = path_from_utf8(std::string(options["EvalFile"]));
-    networks->verify(onVerifyNetworks, networkFile, file);
+    network->verify(onVerifyNetwork, networkFile, file);
 
-    auto statuses = networks.get_status_and_errors();
+    auto statuses = network.get_status_and_errors();
     for (usize i = 0; i < statuses.size(); ++i)
     {
         const auto [status, error] = statuses[i];
@@ -363,7 +355,7 @@ void Engine::verify_networks() const {
             message += " " + *error;
         }
 
-        onVerifyNetworks(message);
+        onVerifyNetwork(message);
     }
 }
 
@@ -377,14 +369,14 @@ std::unique_ptr<Eval::NNUE::Network> Engine::get_default_network() {
 }
 
 void Engine::load_network(const std::filesystem::path& file) {
-    networks.modify_and_replicate(
+    network.modify_and_replicate(
       [this, &file](NN::Network& network_) { network_.load(binaryDirectory, file, networkFile); });
     threads.clear();
     threads.ensure_network_replicated();
 }
 
 void Engine::save_network(const std::optional<std::filesystem::path>& file) {
-    networks.modify_and_replicate(
+    network.modify_and_replicate(
       [&file, this](NN::Network& network_) { network_.save(networkFile, file); });
 }
 
@@ -395,9 +387,9 @@ void Engine::trace_eval() const {
     Position     p;
     p.set(pos.fen(), options["UCI_Chess960"], &trace_states->back());
 
-    verify_networks();
+    verify_network();
 
-    sync_cout << "\n" << Eval::trace(p, *networks) << sync_endl;
+    sync_cout << "\n" << Eval::trace(p, *network) << sync_endl;
 }
 
 const OptionsMap& Engine::get_options() const { return options; }
@@ -416,10 +408,10 @@ std::string Engine::visualize() const {
 int Engine::get_hashfull(int maxAge) const { return tt.hashfull(maxAge); }
 
 std::vector<std::pair<usize, usize>> Engine::get_bound_thread_count_by_numa_node() const {
-    auto                                   counts = threads.get_bound_thread_count_by_numa_node();
-    const NumaConfig&                      cfg    = numaContext.get_numa_config();
+    auto                                 counts = threads.get_bound_thread_count_by_numa_node();
+    const NumaConfig&                    cfg    = numaContext.get_numa_config();
     std::vector<std::pair<usize, usize>> ratios;
-    NumaIndex                              n = 0;
+    NumaIndex                            n = 0;
     for (; n < counts.size(); ++n)
         ratios.emplace_back(counts[n], cfg.num_cpus_in_numa_node(n));
     if (!counts.empty())

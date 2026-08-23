@@ -19,11 +19,10 @@
 #ifndef ENGINE_H_INCLUDED
 #define ENGINE_H_INCLUDED
 
-#include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,6 +30,7 @@
 #include <variant>
 #include <vector>
 
+#include "misc.h"
 #include "history.h"
 #include "book/book_manager.h"
 #include "nnue/network.h"
@@ -75,7 +75,8 @@ class Engine {
     // blocking call to wait for search to finish
     void wait_for_search_finished();
     // set a new position, moves are in UCI format
-    std::optional<PositionSetError> set_position(const std::string& fen, const std::vector<std::string>& moves);
+    std::optional<PositionSetError> set_position(const std::string&              fen,
+                                                 const std::vector<std::string>& moves);
 
     // modifiers
 
@@ -90,11 +91,11 @@ class Engine {
     void set_on_iter(std::function<void(const InfoIter&)>&&);
     void set_on_bestmove(std::function<void(std::string_view, std::string_view)>&&);
     void set_on_start(std::function<void()>&&);
-    void set_on_verify_networks(std::function<void(std::string_view)>&&);
+    void set_on_verify_network(std::function<void(std::string_view)>&&);
 
     // network related
 
-    void                                 verify_networks() const;
+    void                                 verify_network() const;
     std::unique_ptr<Eval::NNUE::Network> get_default_network();
     void                                 load_network(const std::filesystem::path& file);
     void save_network(const std::optional<std::filesystem::path>& file);
@@ -112,10 +113,10 @@ class Engine {
     std::optional<PositionSetError>      flip();
     std::string                          visualize() const;
     std::vector<std::pair<usize, usize>> get_bound_thread_count_by_numa_node() const;
-    std::string                            get_numa_config_as_string() const;
-    std::string                            numa_config_information_as_string() const;
-    std::string                            thread_allocation_information_as_string() const;
-    std::string                            thread_binding_information_as_string() const;
+    std::string                          get_numa_config_as_string() const;
+    std::string                          numa_config_information_as_string() const;
+    std::string                          thread_allocation_information_as_string() const;
+    std::string                          thread_binding_information_as_string() const;
 
    private:
     const std::filesystem::path binaryDirectory;
@@ -129,11 +130,11 @@ class Engine {
     ThreadPool                                        threads;
     TranspositionTable                                tt;
     Eval::NNUE::EvalFile                              networkFile;
-    LazyNumaReplicatedSystemWide<Eval::NNUE::Network> networks;
-    BookManager                                      bookManager;
+    LazyNumaReplicatedSystemWide<Eval::NNUE::Network> network;
+    BookManager                                       bookManager;
 
     Search::SearchManager::UpdateContext  updateContext;
-    std::function<void(std::string_view)> onVerifyNetworks;
+    std::function<void(std::string_view)> onVerifyNetwork;
     std::map<NumaIndex, SharedHistories>  sharedHists;
 };
 

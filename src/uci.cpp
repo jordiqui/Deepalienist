@@ -19,16 +19,15 @@
 #include "uci.h"
 
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <chrono>
 #include <cmath>
-#include <cstdint>
-#include <filesystem>
+#include <cstdlib>
 #include <iterator>
 #include <optional>
 #include <sstream>
 #include <string_view>
+#include <filesystem>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -51,14 +50,14 @@ using ms   = std::chrono::milliseconds;
 
 constexpr auto BenchmarkCommand = "speedtest";
 
-constexpr auto StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-constexpr std::string_view UciLogo = R"LOGO(   __/\\
+constexpr std::string_view UciLogo = R"LOGO(   __/\
  _ / _ \_\
 (_ )\___/ )
   / _ _ \\
  ( (o)o )
   \  ^  /
    `---')LOGO";
+
 template<typename... Ts>
 struct overload: Ts... {
     using Ts::operator()...;
@@ -80,7 +79,7 @@ void UCIEngine::print_info_string(std::string_view str) {
 }
 
 UCIEngine::UCIEngine(CommandLine cli_) :
-    engine(cli_.argv[0]),
+    engine(cli_.argc > 0 ? std::optional{path_from_utf8(cli_.argv[0])} : std::nullopt),
     cli(std::move(cli_)) {
 
     engine.get_options().add_info_listener([](const std::optional<std::string>& str) {
@@ -92,16 +91,17 @@ UCIEngine::UCIEngine(CommandLine cli_) :
 }
 
 void UCIEngine::init_search_update_listeners() {
-    engine.set_on_iter([this](const auto& i) { on_iter(i); });
-    engine.set_on_update_no_moves([this](const auto& i) { on_update_no_moves(i); });
+    engine.set_on_iter([](const auto& i) { on_iter(i); });
+    engine.set_on_update_no_moves([](const auto& i) { on_update_no_moves(i); });
     engine.set_on_update_full(
       [this](const auto& i) { on_update_full(i, engine.get_options()["UCI_ShowWDL"]); });
     engine.set_on_start([]() {});
-    engine.set_on_bestmove([this](const auto& bm, const auto& p) { on_bestmove(bm, p); });
-    engine.set_on_verify_networks([](const auto& s) { print_info_string(s); });
+    engine.set_on_bestmove([](const auto& bm, const auto& p) { on_bestmove(bm, p); });
+    engine.set_on_verify_network([](const auto& s) { print_info_string(s); });
 }
 
 void UCIEngine::loop() {
+    set_console_utf8();
     std::string token, cmd;
 
     for (int i = 1; i < cli.argc; ++i)
@@ -117,13 +117,13 @@ void UCIEngine::loop() {
         std::istringstream is(cmd);
 
         token.clear();  // Avoid a stale if getline() returns nothing or a blank line
-        is >> std::skipws >> token;
+        is >> token;
 
         if (token == "quit" || token == "stop")
         {
             engine.stop();
-            engine.wait_for_search_finished();
-            Experience::flush();
+            if (token == "quit")
+                Experience::flush();
         }
 
         // The GUI sends 'ponderhit' to tell that the user has played the expected move.
@@ -137,16 +137,7 @@ void UCIEngine::loop() {
         {
             print_info_string(UciLogo);
             print_info_string(engine_info());
-
-            if (engine.get_options()["Experience"])
-            {
-                const std::string experienceFile = Experience::resolved_file_path();
-                if (!experienceFile.empty() && !std::filesystem::exists(experienceFile))
-                    print_info_string("Experience file not found: " + experienceFile);
-
-                print_info_string(Experience::status_summary());
-            }
-
+            print_info_string(Experience::status_summary());
             sync_cout << "id name " << engine_info(true) << "\n"
                       << engine.get_options() << sync_endl;
 
@@ -202,20 +193,18 @@ void UCIEngine::loop() {
         }
         else if (token == "--help" || token == "help" || token == "--license" || token == "license")
             sync_cout
-              << "\n" << engine_version_info()
-              << " is a powerful chess engine for playing and analyzing."
+              << "\nStockfish is a powerful chess engine for playing and analyzing."
                  "\nIt is released as free software licensed under the GNU GPLv3 License."
-                 "\n" << engine_version_info()
-              << " is normally used with a graphical user interface (GUI) and implements"
+                 "\nStockfish is normally used with a graphical user interface (GUI) and implements"
                  "\nthe Universal Chess Interface (UCI) protocol to communicate with a GUI, an API, etc."
-                 "\nFor any further information, visit https://github.com/jordiqui/Deepalienist#readme"
+                 "\nFor any further information, visit https://github.com/official-stockfish/Stockfish#readme"
                  "\nor read the corresponding README.md and Copying.txt files distributed along with this program.\n"
               << sync_endl;
         else if (!token.empty() && token[0] != '#')
             sync_cout << "Unknown command: '" << cmd << "'. Type help for more information."
                       << sync_endl;
 
-    } while (token != "quit" && cli.argc == 1);  // The command-line arguments are one-shot
+    } while (token != "quit" && cli.argc <= 1);  // The command-line arguments are one-shot
 }
 
 Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
@@ -268,8 +257,6 @@ Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
 void UCIEngine::go(std::istringstream& is) {
 
     Search::LimitsType limits = parse_limits(is);
-    suppressNonEssentialInfo  = should_suppress_non_essential_info(limits);
-    lastInfoEmissionTimeMs    = 0;
 
     if (limits.perft)
         perft(limits);
@@ -277,18 +264,10 @@ void UCIEngine::go(std::istringstream& is) {
         engine.go(limits);
 }
 
-bool UCIEngine::should_suppress_non_essential_info(const Search::LimitsType& limits) {
-    constexpr TimePoint LowTimeThresholdMs = 1000;
-
-    return (limits.movetime && limits.movetime <= LowTimeThresholdMs)
-        || (limits.time[WHITE] && limits.time[WHITE] <= LowTimeThresholdMs)
-        || (limits.time[BLACK] && limits.time[BLACK] <= LowTimeThresholdMs);
-}
-
 void UCIEngine::bench(std::istream& args) {
     std::string token;
-    u64    num, nodes = 0, cnt = 1;
-    u64    nodesSearched = 0;
+    u64         num, nodes = 0, cnt = 1;
+    u64         nodesSearched = 0;
     const auto& options       = engine.get_options();
 
     engine.set_on_update_full([&](const auto& i) {
@@ -306,7 +285,7 @@ void UCIEngine::bench(std::istream& args) {
     for (const auto& cmd : list)
     {
         std::istringstream is(cmd);
-        is >> std::skipws >> token;
+        is >> token;
 
         if (token == "go" || token == "eval")
         {
@@ -365,7 +344,7 @@ void UCIEngine::benchmark(std::istream& args) {
     engine.set_on_iter([](const auto&) {});
     engine.set_on_update_no_moves([](const auto&) {});
     engine.set_on_bestmove([](const auto&, const auto&) {});
-    engine.set_on_verify_networks([](const auto&) {});
+    engine.set_on_verify_network([](const auto&) {});
 
     Benchmark::BenchmarkSetup setup = Benchmark::setup_benchmark(args);
 
@@ -385,7 +364,7 @@ void UCIEngine::benchmark(std::istream& args) {
     for (const auto& cmd : setup.commands)
     {
         std::istringstream is(cmd);
-        is >> std::skipws >> token;
+        is >> token;
 
         if (token == "go")
         {
@@ -453,7 +432,7 @@ void UCIEngine::benchmark(std::istream& args) {
     for (const auto& cmd : setup.commands)
     {
         std::istringstream is(cmd);
-        is >> std::skipws >> token;
+        is >> token;
 
         if (token == "go")
         {
@@ -535,12 +514,9 @@ u64 UCIEngine::perft(const Search::LimitsType& limits) {
     return nodes;
 }
 
-namespace {
-
-
-}  // namespace
-
 void UCIEngine::position(std::istringstream& is) {
+    const std::string fullCommand = is.str();
+
     std::string token, fen;
 
     is >> token;
@@ -565,7 +541,9 @@ void UCIEngine::position(std::istringstream& is) {
 
     auto err = engine.set_position(fen, moves);
     if (err.has_value())
+    {
         terminate_on_critical_error(err->what());
+    }
 }
 
 namespace {
@@ -612,8 +590,7 @@ std::string UCIEngine::format_score(const Score& s) {
                    return std::string("mate ") + std::to_string(m);
                },
                [](Score::Tablebase tb) -> std::string {
-                   return std::string("cp ")
-                        + std::to_string((tb.win ? TB_CP - tb.plies : -TB_CP - tb.plies));
+                   return std::string("cp ") + std::to_string((tb.win ? TB_CP : -TB_CP) - tb.plies);
                },
                [](Score::InternalUnits units) -> std::string {
                    return std::string("cp ") + std::to_string(units.value);
@@ -690,24 +667,10 @@ Move UCIEngine::to_move(const Position& pos, std::string str) {
 }
 
 void UCIEngine::on_update_no_moves(const Engine::InfoShort& info) {
-    if (suppressNonEssentialInfo)
-        return;
-
     sync_cout << "info depth " << info.depth << " score " << format_score(info.score) << sync_endl;
 }
 
 void UCIEngine::on_update_full(const Engine::InfoFull& info, bool showWDL) {
-    if (suppressNonEssentialInfo)
-    {
-        constexpr TimePoint InfoThrottleMs = 200;
-        const TimePoint     infoTimeMs     = TimePoint(info.timeMs);
-
-        if (infoTimeMs < lastInfoEmissionTimeMs + InfoThrottleMs)
-            return;
-
-        lastInfoEmissionTimeMs = infoTimeMs;
-    }
-
     std::stringstream ss;
 
     ss << "info";
@@ -733,9 +696,6 @@ void UCIEngine::on_update_full(const Engine::InfoFull& info, bool showWDL) {
 }
 
 void UCIEngine::on_iter(const Engine::InfoIter& info) {
-    if (suppressNonEssentialInfo)
-        return;
-
     std::stringstream ss;
 
     ss << "info";

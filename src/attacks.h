@@ -351,8 +351,4 @@ inline Bitboard attacks_bb(Piece pc, Square s, Bitboard occupied) {
 
 }  // namespace Stockfish::Attacks
 
-namespace Stockfish {
-using namespace Attacks;
-}
-
 #endif  // #ifndef ATTACKS_H_INCLUDED

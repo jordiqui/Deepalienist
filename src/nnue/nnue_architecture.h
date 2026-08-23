@@ -32,6 +32,7 @@
 #include "layers/clipped_relu.h"
 #include "layers/sqr_clipped_relu.h"
 #include "nnue_common.h"
+#include "nnz_helper.h"
 
 namespace Stockfish::Eval::NNUE {
 
@@ -98,7 +99,8 @@ struct NetworkArchitecture {
             && fc_2.write_parameters(stream);
     }
 
-    i32 propagate(const TransformedFeatureType* transformedFeatures) const {
+    i32 propagate(const TransformedFeatureType* transformedFeatures,
+                  const NNZInfo<L1>&            nnzInfo) const {
         struct alignas(CacheLineSize) Buffer {
             alignas(CacheLineSize) typename decltype(fc_0)::OutputBuffer fc_0_out;
             alignas(CacheLineSize) typename decltype(ac_sqr_0)::OutputType
@@ -109,7 +111,7 @@ struct NetworkArchitecture {
 
         Buffer buffer;
 
-        fc_0.propagate(transformedFeatures, buffer.fc_0_out);
+        fc_0.propagate(transformedFeatures, buffer.fc_0_out, nnzInfo);
 #if defined(USE_PAIR_ACTIVATIONS)
         ac_sqr_0.propagate_pair(buffer.fc_0_out, buffer.concat_buffer,
                                 buffer.concat_buffer + FC_0_OUTPUTS);
@@ -136,13 +138,12 @@ struct NetworkArchitecture {
 
         // fwdOut is such that 1.0 is equal to HiddenOneVal*(1<<WeightScaleBits)*2 in
         // quantized form, but we want 1.0 to be equal to 600*OutputScale
-        // to make overflow impossible we cast to i64
+        // to make overflow impossible we cast to int64_t
         constexpr i64 multiplier = 600 * OutputScale;
         constexpr i64 denominator =
           static_cast<i64>(HiddenOneVal) * static_cast<i64>(1U << WeightScaleBits) * 2;
 
-        i32 outputValue =
-          static_cast<i32>((static_cast<i64>(fwdOut) * multiplier) / denominator);
+        i32 outputValue = static_cast<i32>((static_cast<i64>(fwdOut) * multiplier) / denominator);
         return outputValue;
     }
 
@@ -164,7 +165,8 @@ struct NetworkArchitecture {
 
 template<>
 struct std::hash<Stockfish::Eval::NNUE::NetworkArchitecture> {
-    std::size_t operator()(const Stockfish::Eval::NNUE::NetworkArchitecture& arch) const noexcept {
+    Stockfish::usize
+    operator()(const Stockfish::Eval::NNUE::NetworkArchitecture& arch) const noexcept {
         return arch.get_content_hash();
     }
 };

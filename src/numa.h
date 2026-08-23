@@ -70,14 +70,12 @@ using GetThreadSelectedCpuSetMasks_t = BOOL (*)(HANDLE, PGROUP_AFFINITY, USHORT,
 
 #endif
 
+#include "misc.h"
+
 namespace Stockfish {
 
 using CpuIndex  = usize;
 using NumaIndex = usize;
-
-// On Windows each processor group can have up to 64 processors.
-// https://learn.microsoft.com/en-us/windows/win32/procthread/processor-groups
-static constexpr usize WIN_PROCESSOR_GROUP_SIZE = 64;
 
 inline CpuIndex get_hardware_concurrency() {
     CpuIndex concurrency = std::thread::hardware_concurrency();
@@ -95,6 +93,10 @@ inline CpuIndex get_hardware_concurrency() {
 inline const CpuIndex SYSTEM_THREADS_NB = std::max<CpuIndex>(1, get_hardware_concurrency());
 
 #if defined(_WIN64)
+
+// On Windows each processor group can have up to 64 processors.
+// https://learn.microsoft.com/en-us/windows/win32/procthread/processor-groups
+static constexpr usize WIN_PROCESSOR_GROUP_SIZE = 64;
 
 struct WindowsAffinity {
     std::optional<std::set<CpuIndex>> oldApi;
@@ -922,7 +924,7 @@ class NumaConfig {
             std::memset(&affinity, 0, sizeof(GROUP_AFFINITY));
             // We use an ordered set to be sure to get the smallest cpu number here.
             const usize forcedProcGroupIndex = *(nodes[n].begin()) / WIN_PROCESSOR_GROUP_SIZE;
-            affinity.Group                    = static_cast<WORD>(forcedProcGroupIndex);
+            affinity.Group                   = static_cast<WORD>(forcedProcGroupIndex);
             for (CpuIndex c : nodes[n])
             {
                 const usize procGroupIndex     = c / WIN_PROCESSOR_GROUP_SIZE;

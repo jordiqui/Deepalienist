@@ -48,15 +48,13 @@
 // Note that this does not work in Microsoft Visual Studio.
 #if !defined(UNIVERSAL_BINARY) && !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
 INCBIN(EmbeddedNNUE, EvalFileDefaultName);
+#elif defined(UNIVERSAL_BINARY_MACOS_X86_SLICE)
+// Determined at runtime, see universal/nnue_embed.cpp
+extern const unsigned char* const gEmbeddedNNUEData;
+extern const unsigned int         gEmbeddedNNUESize;
 #elif defined(UNIVERSAL_BINARY)
-    // When building for the universal binary, use C++26 #embed with weak symbols so that a
-    // separate, non-LTO nnue_embed.o (with strong symbols) can override them during the LTO link,
-    // (INCBIN can't deduplicate.)
-    #define WEAK_SYM __attribute__((weak))
-extern const unsigned char gEmbeddedNNUEData[] WEAK_SYM = {
-    #embed EvalFileDefaultName
-};
-extern const unsigned int gEmbeddedNNUESize WEAK_SYM = sizeof(gEmbeddedNNUEData);
+extern const unsigned char gEmbeddedNNUEData[];
+extern const unsigned int  gEmbeddedNNUESize;
 #else
 const unsigned char gEmbeddedNNUEData[1] = {0x0};
 const unsigned int  gEmbeddedNNUESize    = 1;
@@ -155,7 +153,7 @@ NetworkOutput Network::evaluate(const Position&    pos,
     const int  bucket     = (pos.count<ALL_PIECES>() - 1) / 4;
     const auto psqt       = featureTransformer.transform(pos, accumulatorStack, cache,
                                                          transformedFeatures, bucket, nnzInfo);
-    const auto positional = network[bucket].propagate(transformedFeatures);
+    const auto positional = network[bucket].propagate(transformedFeatures, nnzInfo);
     return {static_cast<Value>(psqt / OutputScale), static_cast<Value>(positional / OutputScale)};
 }
 
@@ -220,7 +218,7 @@ NnueEvalTrace Network::trace_evaluate(const Position&    pos,
         NNZInfo<L1> nnzInfo;
         const auto  materialist = featureTransformer.transform(pos, accumulatorStack, cache,
                                                                transformedFeatures, bucket, nnzInfo);
-        const auto  positional  = network[bucket].propagate(transformedFeatures);
+        const auto  positional  = network[bucket].propagate(transformedFeatures, nnzInfo);
 
         t.psqt[bucket]       = static_cast<Value>(materialist / OutputScale);
         t.positional[bucket] = static_cast<Value>(positional / OutputScale);
@@ -251,6 +249,11 @@ void Network::load_internal(EvalFile& evalFile) {
             setp(p, p + n);
         }
     };
+
+#ifdef UNIVERSAL_BINARY_MACOS_X86_SLICE
+    if (gEmbeddedNNUEData == nullptr)  // failed embedded load
+        return;
+#endif
 
     MemoryBuffer buffer(const_cast<char*>(reinterpret_cast<const char*>(gEmbeddedNNUEData)),
                         usize(gEmbeddedNNUESize));
@@ -322,9 +325,7 @@ bool Network::read_header(std::istream& stream, u32* hashValue, std::string* des
 
 
 // Write network header
-bool Network::write_header(std::ostream&      stream,
-                           u32      hashValue,
-                           const std::string& desc) const {
+bool Network::write_header(std::ostream& stream, u32 hashValue, const std::string& desc) const {
     write_little_endian<u32>(stream, Version);
     write_little_endian<u32>(stream, hashValue);
     write_little_endian<u32>(stream, u32(desc.size()));

@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2026 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 #define SHM_H_INCLUDED
 
 #include <algorithm>
+#include <cinttypes>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -56,7 +57,7 @@
         #define NOMINMAX
     #endif
     #include <windows.h>
-#else
+#elif defined(__linux__)
     #include <cstring>
     #include <fcntl.h>
     #include <pthread.h>
@@ -96,7 +97,7 @@ namespace Stockfish {
 // amount of bytes of the path; in particular it can a hash of an empty string.
 
 inline std::string getExecutablePathHash() {
-    char        executable_path[4096] = {0};
+    char  executable_path[4096] = {0};
     usize path_length           = 0;
 
 #if defined(_WIN32)
@@ -119,7 +120,7 @@ inline std::string getExecutablePathHash() {
 
 #elif defined(__FreeBSD__)
     usize size   = sizeof(executable_path);
-    int    mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
+    int   mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
     if (sysctl(mib, 4, executable_path, &size, NULL, 0) == 0)
     {
         path_length = std::strlen(executable_path);
@@ -168,9 +169,9 @@ inline std::string GetLastErrorAsString(DWORD error) {
     //Ask Win32 to give us the string version of that message ID.
     //The parameters we pass in, tell Win32 to create the buffer that holds the message for us (because we don't yet know how long the message string will be).
     usize size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
-                                   | FORMAT_MESSAGE_IGNORE_INSERTS,
-                                 NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                                 (LPSTR) &messageBuffer, 0, NULL);
+                                  | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                                (LPSTR) &messageBuffer, 0, NULL);
 
     //Copy the error message into a std::string.
     std::string message(messageBuffer, size);
@@ -452,7 +453,8 @@ class SharedMemoryBackend {
    public:
     SharedMemoryBackend() = default;
 
-    SharedMemoryBackend(const std::string& shm_name, const T& value) {}
+    SharedMemoryBackend([[maybe_unused]] const std::string& shm_name,
+                        [[maybe_unused]] const T&           value) {}
 
     void* get() const { return nullptr; }
 
@@ -508,12 +510,9 @@ template<typename T>
 struct SystemWideSharedConstant {
    private:
     static std::string createHashString(const std::string& input) {
-        usize hash = std::hash<std::string>{}(input);
-
-        std::stringstream ss;
-        ss << std::hex << std::setfill('0') << hash;
-
-        return ss.str();
+        char buf[1024];
+        std::snprintf(buf, sizeof(buf), "%016" PRIx64, hash_string(input));
+        return buf;
     }
 
    public:
@@ -530,11 +529,12 @@ struct SystemWideSharedConstant {
     // that are not present in the content, for example NUMA node allocation.
     SystemWideSharedConstant(const T& value, usize discriminator = 0) {
         usize content_hash    = std::hash<T>{}(value);
-        usize executable_hash = std::hash<std::string>{}(getExecutablePathHash());
+        usize executable_hash = hash_string(getExecutablePathHash());
 
-        std::string shm_name = std::string("Local\\sf_") + std::to_string(content_hash) + "$"
-                             + std::to_string(executable_hash) + "$"
-                             + std::to_string(discriminator);
+        char buf[1024];
+        std::snprintf(buf, sizeof(buf), "Local\\sf_%zu$%zu$%zu", content_hash, executable_hash,
+                      discriminator);
+        std::string shm_name = buf;
 
 #if defined(USE_UNIX_SHM)
         // POSIX shared memory names must start with a slash

@@ -23,10 +23,10 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 
 #include "../types.h"
+#include "../misc.h"
 #include "nnue_architecture.h"
 #include "nnue_common.h"
 
@@ -45,7 +45,7 @@ class FeatureTransformer;
 struct alignas(CacheLineSize) Accumulator {
     std::array<std::array<i16, L1>, COLOR_NB>          accumulation;
     std::array<std::array<i32, PSQTBuckets>, COLOR_NB> psqtAccumulation;
-    std::array<bool, COLOR_NB>                                  computed = {};
+    std::array<bool, COLOR_NB>                         computed = {};
 };
 
 
@@ -121,12 +121,12 @@ class AccumulatorStack {
     void forward_update_incremental(Color                     perspective,
                                     const Position&           pos,
                                     const FeatureTransformer& featureTransformer,
-                                    const usize         begin) noexcept;
+                                    const usize               begin) noexcept;
 
     void backward_update_incremental(Color                     perspective,
                                      const Position&           pos,
                                      const FeatureTransformer& featureTransformer,
-                                     const usize         end) noexcept;
+                                     const usize               end) noexcept;
 
     void forward_update_incremental_both(const Position&           pos,
                                          const FeatureTransformer& featureTransformer,
