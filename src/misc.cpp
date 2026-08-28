@@ -53,6 +53,18 @@ namespace fs = std::filesystem;
 
 namespace {
 
+#ifdef ENGINE_NAME
+constexpr std::string_view engineName = ENGINE_NAME;
+#else
+constexpr std::string_view engineName = "Deepalienist";
+#endif
+
+#ifdef ENGINE_VERSION
+constexpr std::string_view engineVersion = ENGINE_VERSION;
+#else
+constexpr std::string_view engineVersion = "5.60-280826";
+#endif
+
 // Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 // cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
 // can toggle the logging of std::cout and std::cin at runtime whilst preserving
@@ -133,19 +145,19 @@ class Logger {
 // For releases (non-dev builds) we only include the version number:
 //      Stockfish version
 std::string engine_release_info() {
-#ifdef ENGINE_RELEASE_ID
-    return stringify(ENGINE_RELEASE_ID);
-#else
-    return "Deepalienist-5.50-230826";
-#endif
+    return std::string(engineName) + "-" + std::string(engineVersion);
 }
 
 std::string engine_public_info() {
-#ifdef ENGINE_PUBLIC_ID
-    return stringify(ENGINE_PUBLIC_ID);
-#else
-    return engine_release_info();
+#ifdef UNIVERSAL_BINARY
+    return engine_release_info() + "-universal";
+#elif defined(ENGINE_ARCH_TAG)
+    constexpr std::string_view archTag = ENGINE_ARCH_TAG;
+    if constexpr (!archTag.empty())
+        return engine_release_info() + "-" + std::string(archTag);
 #endif
+
+    return engine_release_info();
 }
 
 }  // namespace
