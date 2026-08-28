@@ -59,18 +59,18 @@ else ifeq ($(COMP),mingw)
 	endif
 endif
 
-### Executable name
-ifeq ($(target_windows),yes)
-	EXESUF = .exe
-else
-	EXESUF =
-endif
+### Release and executable identity
 ENGINE_BASENAME = Deepalienist
-RELEASE_TAG = 5.50-230826
-BUILD_ARCH_TAG = $(subst x86-64-,,$(ARCH))
-ENGINE_RELEASE_ID = $(ENGINE_BASENAME)-$(RELEASE_TAG)
-ENGINE_PUBLIC_ID = $(ENGINE_RELEASE_ID)-$(BUILD_ARCH_TAG)
-EXE = $(ENGINE_PUBLIC_ID)$(EXESUF)
+RELEASE_TAG ?= 5.60-280826
+BASE_ID = $(ENGINE_BASENAME)-$(RELEASE_TAG)
+
+ifeq ($(target_windows),yes)
+	EXE = $(BASE_ID)-$(ARCH_TAG).exe
+else ifneq (,$(findstring wasm,$(ARCH)))
+	EXE = $(BASE_ID)-$(ARCH_TAG).js
+else
+	EXE = $(BASE_ID)-$(ARCH_TAG)
+endif
 
 NNUE_NET = nn-1a298aa575a0.nnue
 
@@ -159,6 +159,22 @@ endif
 
 ifeq ($(ARCH), native)
    override ARCH := $(shell $(SHELL) ../scripts/get_native_properties.sh | cut -d " " -f 1)
+endif
+
+# Preserve established release aliases and otherwise expose the exact build target.
+ARCH_TAG = $(ARCH)
+ifeq ($(ARCH),x86-64-sse41-popcnt)
+   ARCH_TAG = sse41popcnt
+else ifeq ($(ARCH),x86-64-avx2)
+   ARCH_TAG = avx2
+else ifeq ($(ARCH),x86-64-bmi2)
+   ARCH_TAG = bmi2
+else ifeq ($(ARCH),x86-64-avx512)
+   ARCH_TAG = avx512
+else ifeq ($(ARCH),x86-64-avx512icl)
+   ARCH_TAG = avx512icl
+else ifeq ($(ARCH),x86-64-universal)
+   ARCH_TAG = universal
 endif
 
 # explicitly check for the list of supported architectures (as listed with make help),
@@ -507,6 +523,8 @@ ifeq ($(MAKELEVEL),0)
 endif
 
 CXXFLAGS = $(ENV_CXXFLAGS) -Wall -Wcast-qual -fno-exceptions -std=c++17 $(EXTRACXXFLAGS)
+CXXFLAGS += -DENGINE_NAME=\"$(ENGINE_BASENAME)\" -DENGINE_VERSION=\"$(RELEASE_TAG)\" \
+            -DENGINE_ARCH_TAG=\"$(ARCH_TAG)\"
 DEPENDFLAGS = $(ENV_DEPENDFLAGS) -std=c++17
 LDFLAGS = $(ENV_LDFLAGS) $(EXTRALDFLAGS)
 
@@ -943,8 +961,6 @@ endif
 ### 3.8.2 Try to include architecture
 ifneq ($(ARCH), )
 	CXXFLAGS += -DARCH=$(ARCH)
-	CXXFLAGS += -DENGINE_RELEASE_ID=$(ENGINE_RELEASE_ID)
-	CXXFLAGS += -DENGINE_PUBLIC_ID=$(ENGINE_PUBLIC_ID)
 endif
 
 ### 3.9 Link Time Optimization
