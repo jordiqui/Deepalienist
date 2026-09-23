@@ -61,7 +61,7 @@ endif
 
 ### Release and executable identity
 ENGINE_BASENAME = Deepalienist
-RELEASE_TAG ?= 5.60-280826
+RELEASE_TAG ?= 5.70-230926
 BASE_ID = $(ENGINE_BASENAME)-$(RELEASE_TAG)
 
 ifeq ($(target_windows),yes)
