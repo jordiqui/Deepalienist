@@ -464,10 +464,13 @@ sf_always_inline inline Tile apply_psq_features(IndexType                       
     if constexpr (Incremental)
     {
         assert(list.size() == 1 || list.size() == 2);
+        // Use the loop below for scalar builds to avoid spurious GCC uninitialized warnings.
+#if defined(VECTOR) || defined(USE_RVV)
         acc = apply<sign>(j, acc, &ft.weights[list[0] * Dimensions]);
         if (list.size() > 1)
             acc = apply<sign>(j, acc, &ft.weights[list[1] * Dimensions]);
         return acc;
+#endif
     }
     for (int i = 0; i < list.ssize(); ++i)
         acc = apply<sign>(j, acc, &ft.weights[list[i] * Dimensions]);
