@@ -402,9 +402,7 @@ void dbg_print() {
 
     for (int i = 0; i < MaxDebugSlots; ++i)
         if ((n = mean[i][0]))
-        {
             std::cerr << "Mean #" << i << ": Total " << n << " Mean " << E(mean[i][1]) << std::endl;
-        }
 
     for (int i = 0; i < MaxDebugSlots; ++i)
         if ((n = stdev[i][0]))
@@ -415,10 +413,8 @@ void dbg_print() {
 
     for (int i = 0; i < MaxDebugSlots; ++i)
         if ((n = extremes[i][0]))
-        {
             std::cerr << "Extremity #" << i << ": Total " << n << " Min " << extremes[i][2]
                       << " Max " << extremes[i][1] << std::endl;
-        }
 
     for (int i = 0; i < MaxDebugSlots; ++i)
         if ((n = correl[i][0]))
