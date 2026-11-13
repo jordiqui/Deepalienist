@@ -72,7 +72,7 @@ else
 	EXE = $(BASE_ID)-$(ARCH_TAG)
 endif
 
-NNUE_NET = nn-252f33942263.nnue
+NNUE_NET = nn-a8bcb689c267.nnue
 
 ### Installation dir definitions
 PREFIX = /usr/local
