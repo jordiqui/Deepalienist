@@ -375,7 +375,7 @@ void PolyglotBook::get_moves(const Position& pos, std::vector<PolyglotBookMove>&
             continue;
 
         Move move = make_move(e);
-        for (const auto& m : MoveList<LEGAL>(pos))
+        for (const auto& m : MoveList<ALL>(pos))
         {
             if (move.raw() == (m.raw() ^ m.type_of()))
             {

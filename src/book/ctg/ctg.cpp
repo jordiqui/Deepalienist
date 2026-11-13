@@ -911,7 +911,7 @@ void CtgBook::get_moves(const Position&        pos,
                         const CtgPositionData& positionData,
                         CtgMoveList&           ctgMoveList) const {
     //Get legal moves for cross checking later
-    MoveList legalMoves = MoveList<LEGAL>(pos);
+    MoveList legalMoves = MoveList<ALL>(pos);
 
     //Position object to be used to play the moves
     StateInfo si[2];
